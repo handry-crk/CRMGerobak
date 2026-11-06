@@ -71,21 +71,25 @@ async def find_member_by_device(db: AsyncIOMotorDatabase, device_token: str | No
 
 
 async def find_or_create_member(
-    db: AsyncIOMotorDatabase, phone_raw: str, outlet: dict, settings: dict, opt_in: bool | None = None
+    db: AsyncIOMotorDatabase, phone_raw: str, outlet: dict, settings: dict, opt_in: bool | None = None,
+    name: str | None = None,
 ) -> tuple[dict, bool, dict | None]:
     phone = normalize_phone(phone_raw)
     if not phone:
-        raise StampError("Nomor WhatsApp-nya belum pas, Kak. Contoh: 08123456789.", "bad_phone", 422)
+        raise StampError("Nomor WhatsApp-nya belum pas, Kak. Tulis mulai 08, contoh 081234567890.", "bad_phone", 422)
     member = await db.members.find_one({"phone": phone})
     if member:
         return member, False, None
+    name = (name or "").strip()[:40]
+    if not name:
+        raise StampError("Nama panggilannya diisi dulu ya, Kak.", "need_name", 422)
     now = now_utc()
     is_staff = await db.staff_numbers.find_one({"phone": phone}) is not None
     member = {
         "isStaff": is_staff,
         "_id": new_id("mbr"),
         "phone": phone,
-        "name": None,
+        "name": name,
         "city": outlet.get("city") or outlet.get("area"),
         "joinedAt": iso(now),
         "joinedDay": today_wib(),
@@ -160,6 +164,7 @@ async def process_stamp(
     promo_code: str | None = None,
     ip: str | None = None,
     opt_in: bool | None = None,
+    name: str | None = None,
 ) -> dict:
     outlet = await outlet_by_token(db, qr_token)
 
@@ -172,12 +177,12 @@ async def process_stamp(
                 "needPhone": True,
                 "outlet": outlet_public(outlet, settings),
             }
-        member, is_new, welcome = await find_or_create_member(db, phone, outlet, settings, opt_in)
+        member, is_new, welcome = await find_or_create_member(db, phone, outlet, settings, opt_in, name)
     elif phone:
         # Perangkat dikenal tapi nomor yang diketik berbeda → pindah ke akun nomor tersebut
         other = normalize_phone(phone)
         if other and other != member["phone"]:
-            member, is_new, welcome = await find_or_create_member(db, phone, outlet, settings, opt_in)
+            member, is_new, welcome = await find_or_create_member(db, phone, outlet, settings, opt_in, name)
 
     # Idempotensi: requestId sama dalam 5 menit → hasil yang sama
     if request_id:
@@ -279,7 +284,7 @@ async def build_response(
 
     ask_profile = (
         int(member.get("visits", 0)) >= 2
-        and not (member.get("name") and member.get("source"))
+        and not member.get("source")
         and int(member.get("profileSkips", 0)) < 2
     )
     return {

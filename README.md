@@ -64,7 +64,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 20 skenario acceptance (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 21 skenario acceptance (mongomock, tanpa server Mongo)
 ```
 
 ## Roadmap (Iterasi di build spec)

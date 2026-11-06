@@ -40,7 +40,7 @@ export default function Me() {
     return (
       <main className="max-w-[420px] mx-auto min-h-screen pb-10">
         <Header title="Stamp Bojot" subtitle="Stamp & voucher saya" />
-        <PhoneForm onSubmit={switchDevice} busy={busy} error={err} headline="Lanjutin stamp di HP ini" sub="Masukkan nomor WhatsApp yang dipakai saat gabung." />
+        <PhoneForm onSubmit={switchDevice} busy={busy} error={err} headline="Lanjutin stamp di HP ini" sub="Masukkan nomor WhatsApp yang dipakai saat gabung." submitLabel="Lanjutkan" />
         <p className="px-4 mt-4 text-xs text-charcoal/60">Belum pernah gabung? Scan QR di gerobak Cimol Bojot AA terdekat ya, Kak.</p>
       </main>
     )

@@ -18,7 +18,7 @@ async def stamp(client, token, **kw):
 async def make_reward(client, outlets, phone):
     """Member dengan 4 stamp aktif lalu stamp ke-5 → reward."""
     db = dbmod.get_db()
-    res = await stamp(client, outlets[0]["qrToken"], phone=phone)
+    res = await stamp(client, outlets[0]["qrToken"], phone=phone, name="Dina")
     await db.members.update_one({"_id": res["member"]["id"]}, {"$set": {"stampsActive": 4}})
     await db.settings.update_one({"_id": "main"}, {"$set": {"minMinutesBetweenStamps": 0}})
     r = await stamp(client, outlets[1]["qrToken"], deviceToken=res["deviceToken"])
@@ -54,8 +54,8 @@ async def test_redeem_quota_per_outlet(client, admin, outlets):
 
 async def test_staff_number_no_voucher_and_excluded_from_kpi(client, admin, outlets):
     r = await client.post("/api/admin/staff", json={"phone": "0899 0000 111", "name": "Crew Braga", "outletCode": "bdg-brg-01"}, headers=admin)
-    assert r.status_code == 200 and r.json()["phone"] == "+628990000111"
-    res = await stamp(client, outlets[0]["qrToken"], phone="08990000111")
+    assert r.status_code == 200 and r.json()["phone"] == "08990000111"
+    res = await stamp(client, outlets[0]["qrToken"], phone="08990000111", name="Dina")
     assert res["granted"] and res["member"]["isStaff"] and res["welcomeVoucher"] is None and res["askFeedback"] is False
     assert "crew" in res["headline"].lower()
     db = dbmod.get_db()
@@ -64,13 +64,13 @@ async def test_staff_number_no_voucher_and_excluded_from_kpi(client, admin, outl
     r5 = await stamp(client, outlets[1]["qrToken"], deviceToken=res["deviceToken"])
     assert r5["granted"] and r5["rewardIssued"] is False and r5["vouchers"] == []
     # Pelanggan asli
-    await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     s = (await client.get("/api/admin/summary", headers=admin)).json()["kpi"]
     assert s["newMembers"] == 1 and s["stamps"] == 1
 
 
 async def test_adding_staff_marks_existing_member(client, admin, outlets):
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     assert res["welcomeVoucher"]
     r = await client.post("/api/admin/staff", json={"phone": "081234567890"}, headers=admin)
     assert r.status_code == 200

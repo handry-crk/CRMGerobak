@@ -71,11 +71,11 @@ export default function Scan() {
     setState({ phase: 'result', res })
   }
 
-  async function submitPhone(phone, optIn) {
+  async function submitPhone(phone, optIn, name) {
     setBusy(true); setFormErr('')
     try {
       const pos = await getPosition(1000)
-      const res = await api('/api/stamp', { method: 'POST', device: false, body: { qrToken: token, requestId: reqId.current, phone, optIn, deviceToken: getDevice(), ...(pos || {}) } })
+      const res = await api('/api/stamp', { method: 'POST', device: false, body: { qrToken: token, requestId: reqId.current, phone, name, optIn, deviceToken: getDevice(), ...(pos || {}) } })
       apply(res)
     } catch (e) {
       setFormErr(e.message)
@@ -139,7 +139,7 @@ export default function Scan() {
     return (
       <main className="max-w-[420px] mx-auto min-h-screen pb-10">
         <Header title={outlet?.name || 'Gerobak AA'} subtitle={outlet?.area} />
-        <PhoneForm onSubmit={submitPhone} busy={busy} error={formErr}
+        <PhoneForm onSubmit={submitPhone} busy={busy} error={formErr} requireName
           sub={`${outlet?.stampsPerReward || 5} stamp = ${outlet?.rewardTitle || 'Cimol Bojot kecil gratis'}.`} />
         <div className="px-4 mt-6 text-xs text-charcoal/60">Udah pernah gabung tapi ganti HP? <Link className="text-deep font-bold" to="/saya">Masukkan nomor di sini</Link>.</div>
       </main>
@@ -201,9 +201,13 @@ export default function Scan() {
       {res.askProfile && !profileDone && (
         <section className="px-4 mt-4">
           <div className="card">
-            <div className="font-bold text-sm">Boleh tahu nama panggilannya?</div>
-            <input className="input mt-2" maxLength={40} placeholder="Nama panggilan" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
-            <div className="font-bold text-sm mt-3">Tahu Cimol Bojot AA dari mana?</div>
+            {!res.member.name && (
+              <>
+                <div className="font-bold text-sm">Boleh tahu nama panggilannya?</div>
+                <input className="input mt-2 mb-3" maxLength={40} placeholder="Nama panggilan" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+              </>
+            )}
+            <div className="font-bold text-sm">Tahu Cimol Bojot AA dari mana?</div>
             <div className="mt-2 flex flex-wrap gap-2">
               {sources.map((s) => <button key={s} className={`chip ${profile.source === s ? 'chip-on' : ''}`} onClick={() => setProfile({ ...profile, source: s })}>{s}</button>)}
             </div>

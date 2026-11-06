@@ -32,10 +32,10 @@ async def test_new_member_first_stamp_and_welcome_voucher(client, outlets):
     first = await stamp(client, tok)
     assert first["needPhone"] is True
 
-    res = await stamp(client, tok, phone="081234567890")
+    res = await stamp(client, tok, phone="081234567890", name="Dina")
     assert res["granted"] and res["isNewMember"]
     assert res["stampsActive"] == 1 and res["stampsTotal"] == 1
-    assert res["member"]["maskedPhone"].startswith("+62812")
+    assert res["member"]["maskedPhone"] == "0812****890"
     assert "Stamp pertama" in res["headline"]
     wv = res["welcomeVoucher"]
     assert wv and wv["type"] == "balik_lagi" and wv["status"] == "scheduled"
@@ -43,7 +43,7 @@ async def test_new_member_first_stamp_and_welcome_voucher(client, outlets):
     assert wv["validTo"] == add_days(wv["validFrom"], 7)
 
     db = dbmod.get_db()
-    m = await db.members.find_one({"phone": "+6281234567890"})
+    m = await db.members.find_one({"phone": "081234567890"})
     assert m is not None
 
 
@@ -55,7 +55,7 @@ async def test_bad_phone_rejected(client, outlets):
 
 async def test_same_outlet_same_day_not_granted(client, outlets):
     tok = outlets[0]["qrToken"]
-    res = await stamp(client, tok, phone="081234567890")
+    res = await stamp(client, tok, phone="081234567890", name="Dina")
     dev = res["deviceToken"]
     again = await stamp(client, tok, deviceToken=dev)
     assert again["needPhone"] is False
@@ -66,7 +66,7 @@ async def test_same_outlet_same_day_not_granted(client, outlets):
 
 async def test_min_gap_and_daily_limit(client, outlets):
     a, b, c = (o["qrToken"] for o in outlets[:3])
-    res = await stamp(client, a, phone="081234567890")
+    res = await stamp(client, a, phone="081234567890", name="Dina")
     dev, mid = res["deviceToken"], res["member"]["id"]
 
     await backdate_last_stamp(mid, 10)
@@ -85,7 +85,7 @@ async def test_min_gap_and_daily_limit(client, outlets):
 async def test_idempotent_request_id(client, outlets):
     tok = outlets[0]["qrToken"]
     req = rid()
-    r1 = await client.post("/api/stamp", json={"qrToken": tok, "requestId": req, "phone": "081234567890"})
+    r1 = await client.post("/api/stamp", json={"qrToken": tok, "requestId": req, "phone": "081234567890", "name": "Dina"})
     r2 = await client.post("/api/stamp", json={"qrToken": tok, "requestId": req, "deviceToken": r1.json()["deviceToken"]})
     assert r2.json()["granted"] is True  # hasil asli dikembalikan, bukan "already_today"
     db = dbmod.get_db()
@@ -95,7 +95,7 @@ async def test_idempotent_request_id(client, outlets):
 async def test_five_stamps_issue_reward_and_redeem_flow(client, outlets):
     db = dbmod.get_db()
     await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0}})  # H+1 diuji di test_antifraud
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     dev, mid = res["deviceToken"], res["member"]["id"]
     # Simulasikan 4 hari sebelumnya sudah stamp di outlet lain
     for i in range(1, 5):
@@ -125,7 +125,7 @@ async def test_five_stamps_issue_reward_and_redeem_flow(client, outlets):
 
 
 async def test_scheduled_voucher_cannot_redeem_yet(client, outlets):
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     wv = res["welcomeVoucher"]
     r = await client.post(f"/api/voucher/{wv['id']}/redeem", json={"qrToken": outlets[0]["qrToken"]}, headers={"X-Device-Token": res["deviceToken"]})
     assert r.status_code == 409 and r.json()["detail"]["code"] == "not_yet"
@@ -133,7 +133,7 @@ async def test_scheduled_voucher_cannot_redeem_yet(client, outlets):
 
 async def test_geofence_flags_but_grants(client, outlets):
     o = outlets[0]
-    res = await stamp(client, o["qrToken"], phone="081234567890", lat=o["lat"] + 0.02, lng=o["lng"])  # ±2 km
+    res = await stamp(client, o["qrToken"], phone="081234567890", name="Dina", lat=o["lat"] + 0.02, lng=o["lng"])  # ±2 km
     assert res["granted"] is True
     db = dbmod.get_db()
     s = await db.stamps.find_one({})
@@ -142,7 +142,7 @@ async def test_geofence_flags_but_grants(client, outlets):
 
 async def test_flagged_member_appears_in_summary(client, admin, outlets):
     db = dbmod.get_db()
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     mid = res["member"]["id"]
     for i in range(3):
         await db.stamps.insert_one({"_id": f"stp_x{i}", "memberId": mid, "outletId": outlets[0]["id"], "outletCode": "X", "area": "Bandung",
@@ -154,7 +154,7 @@ async def test_flagged_member_appears_in_summary(client, admin, outlets):
 
 
 async def test_feedback_and_profile(client, outlets):
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     h = {"X-Device-Token": res["deviceToken"]}
     r = await client.post("/api/feedback", json={"qrToken": outlets[0]["qrToken"], "stampId": res["stampId"], "rating": 5, "tag": "Enak banget"}, headers=h)
     assert r.status_code == 200
@@ -181,8 +181,8 @@ async def test_rotate_qr_replaces_old_token(client, admin, outlets):
 
 async def test_admin_roles_area_and_masking(client, admin, outlets):
     db = dbmod.get_db()
-    await stamp(client, outlets[4]["qrToken"], phone="081234567890")  # Depok
-    await stamp(client, outlets[0]["qrToken"], phone="081298765432")  # Bandung
+    await stamp(client, outlets[4]["qrToken"], phone="081234567890", name="Dina")  # Depok
+    await stamp(client, outlets[0]["qrToken"], phone="081298765432", name="Dina")  # Bandung
     # Buat user Area Bandung & Viewer
     r = await client.post("/api/admin/users", json={"name": "Area Bdg", "role": "Area", "areas": ["Bandung"], "pin": "2222"}, headers=admin)
     assert r.status_code == 200
@@ -203,7 +203,7 @@ async def test_admin_roles_area_and_masking(client, admin, outlets):
     # Export hanya CRM Lead/Manager
     assert (await client.get("/api/admin/export/members.csv", headers=vh)).status_code == 403
     exp = await client.get("/api/admin/export/members.csv", headers=admin)
-    assert exp.status_code == 200 and "+6281234567890" in exp.text
+    assert exp.status_code == 200 and "081234567890" in exp.text
 
 
 async def test_pin_lockout(client):
@@ -215,7 +215,7 @@ async def test_pin_lockout(client):
 
 
 async def test_metrics_api_key(client, outlets):
-    await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     assert (await client.get("/api/public-metrics/crm")).status_code == 401
     r = await client.get("/api/public-metrics/crm", headers={"X-Api-Key": "test-key"})
     assert r.status_code == 200 and r.json()["member"] == 1 and r.json()["stamps"] == 1
@@ -223,7 +223,7 @@ async def test_metrics_api_key(client, outlets):
 
 async def test_jobs_activate_and_expire(client, admin, outlets):
     db = dbmod.get_db()
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     wv = res["welcomeVoucher"]
     await db.vouchers.update_one({"_id": wv["id"]}, {"$set": {"validFrom": today_wib()}})
     r = await client.post("/api/admin/jobs/activate/run", headers=admin)
@@ -235,3 +235,18 @@ async def test_jobs_activate_and_expire(client, admin, outlets):
     assert r.status_code == 200 and r.json()["kpi"]["newMembers"] == 1
     r = await client.post("/api/admin/jobs/weekly/run", headers=admin)
     assert r.status_code == 200
+
+
+async def test_phone_formats_unified_to_08_and_name_required(client, outlets):
+    tok = outlets[0]["qrToken"]
+    # Tanpa nama → ditolak dengan pesan ramah
+    r = await client.post("/api/stamp", json={"qrToken": tok, "requestId": rid(), "phone": "081234567890"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "need_name"
+    # +62 / 62 / 08 → tersimpan 08
+    res = await stamp(client, tok, phone="+62 812-3456-7890", name="Dina")
+    db = dbmod.get_db()
+    m = await db.members.find_one({"_id": res["member"]["id"]})
+    assert m["phone"] == "081234567890" and m["name"] == "Dina"
+    again = await client.post("/api/stamp", json={"qrToken": outlets[1]["qrToken"], "requestId": rid(), "phone": "6281234567890"})
+    assert again.status_code == 200 and again.json()["member"]["id"] == m["_id"]  # nomor sama, bukan member baru
+    assert again.json()["isNewMember"] is False

@@ -24,6 +24,7 @@ class StampIn(BaseModel):
     lng: float | None = None
     promoCode: str | None = None
     optIn: bool | None = None
+    name: str | None = Field(default=None, max_length=40)
 
 
 class FeedbackIn(BaseModel):
@@ -68,7 +69,7 @@ async def post_stamp(body: StampIn, request: Request, db: AsyncIOMotorDatabase =
     try:
         return await stamp_svc.process_stamp(
             db, settings, body.qrToken, body.requestId, body.phone, body.deviceToken,
-            body.lat, body.lng, body.promoCode, ip, body.optIn,
+            body.lat, body.lng, body.promoCode, ip, body.optIn, body.name,
         )
     except StampError as e:
         raise HTTPException(e.status, {"code": e.code, "message": e.message})

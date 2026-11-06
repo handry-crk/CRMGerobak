@@ -138,18 +138,37 @@ export function RedeemFlow({ voucher, qrToken, outletName, countdownSec = 180, o
   )
 }
 
-export function PhoneForm({ onSubmit, busy, error, headline, sub }) {
+/** Nomor diseragamkan ke 08xxxxxxxx: hanya angka, +62/62 di depan otomatis jadi 0. */
+export function tidyPhone(raw) {
+  let d = (raw || '').replace(/\D/g, '')
+  if (d.startsWith('62')) d = '0' + d.slice(2)
+  else if (d.startsWith('8')) d = '0' + d
+  return d.slice(0, 13)
+}
+export const phoneOk = (p) => /^08\d{8,11}$/.test(p)
+
+export function PhoneForm({ onSubmit, busy, error, headline, sub, requireName = false, submitLabel = 'Ambil stamp' }) {
   const [phone, setPhone] = useState('')
+  const [name, setName] = useState('')
   const [optIn, setOptIn] = useState(true)
+  const ready = phoneOk(phone) && (!requireName || name.trim().length >= 2)
   return (
-    <form className="px-4 pt-2" onSubmit={(e) => { e.preventDefault(); onSubmit(phone, optIn) }}>
+    <form className="px-4 pt-2" onSubmit={(e) => { e.preventDefault(); if (ready) onSubmit(phone, optIn, name.trim()) }}>
       <h1 className="text-2xl font-extrabold leading-tight">{headline || 'Scan, dapet stamp.'}</h1>
       <p className="mt-1 text-charcoal/80">{sub}</p>
-      <label className="block mt-5 text-sm font-bold" htmlFor="phone">No. WhatsApp</label>
-      <input id="phone" className="input mt-1" inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" value={phone}
-        onChange={(e) => setPhone(e.target.value)} autoFocus required />
+      {requireName && (
+        <>
+          <label className="block mt-5 text-sm font-bold" htmlFor="name">Nama panggilan</label>
+          <input id="name" className="input mt-1" autoComplete="given-name" placeholder="Contoh: Dina" maxLength={40} value={name}
+            onChange={(e) => setName(e.target.value)} autoFocus required />
+        </>
+      )}
+      <label className={`block ${requireName ? 'mt-3' : 'mt-5'} text-sm font-bold`} htmlFor="phone">No. WhatsApp</label>
+      <input id="phone" className="input mt-1" inputMode="numeric" autoComplete="tel-national" placeholder="081234567890" value={phone}
+        onChange={(e) => setPhone(tidyPhone(e.target.value))} autoFocus={!requireName} required />
+      {phone && !phoneOk(phone) && <div className="mt-1 text-xs text-charcoal/60">Tulis mulai 08, 10–13 angka.</div>}
       {error && <div className="mt-2 text-sm text-brand font-bold">{error}</div>}
-      <button className="btn-primary w-full mt-4" disabled={busy || phone.replace(/\D/g, '').length < 9}>{busy ? 'Sebentar…' : 'Ambil stamp'}</button>
+      <button className="btn-primary w-full mt-4" disabled={busy || !ready}>{busy ? 'Sebentar…' : submitLabel}</button>
       <p className="mt-3 text-xs text-charcoal/70">Nomor cuma dipakai buat info promo &amp; voucher. Nggak ada spam.</p>
       <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={optIn} onChange={(e) => setOptIn(e.target.checked)} /> Boleh kirim info promo via WA</label>
     </form>

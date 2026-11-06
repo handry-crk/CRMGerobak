@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 WIB = ZoneInfo("Asia/Jakarta")
 
-ID_MOBILE_RE = re.compile(r"^\+628\d{8,11}$")
+ID_MOBILE_RE = re.compile(r"^08\d{8,11}$")
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 BULAN = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -71,22 +71,21 @@ def format_rp(n: int | float) -> str:
 
 
 def normalize_phone(raw: str) -> str | None:
-    """08xx / 62xx / +62xx → +62xx. None bila bukan nomor seluler Indonesia."""
+    """Seragam ke format 08xxxxxxxx. Menerima 08xx / 62xx / +62xx / 8xx. None bila bukan nomor seluler Indonesia."""
     if not raw:
         return None
     digits = re.sub(r"\D", "", raw)
-    if digits.startswith("0"):
-        digits = "62" + digits[1:]
+    if digits.startswith("62"):
+        digits = "0" + digits[2:]
     elif digits.startswith("8"):
-        digits = "62" + digits
-    phone = "+" + digits
-    return phone if ID_MOBILE_RE.match(phone) else None
+        digits = "0" + digits
+    return digits if ID_MOBILE_RE.match(digits) else None
 
 
 def mask_phone(phone: str) -> str:
     if not phone or len(phone) < 8:
         return phone
-    return phone[:6] + "****" + phone[-3:]
+    return phone[:4] + "****" + phone[-3:]
 
 
 def hash_pin(pin: str, salt: str | None = None) -> str:
