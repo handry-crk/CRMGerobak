@@ -35,7 +35,10 @@ async def audit(db, user: dict, action: str, target: str | None = None, detail: 
 
 
 def outlet_url(qr_token: str) -> str:
-    return f"{config.public_base_url.rstrip('/')}/s/{qr_token}"
+    base = config.public_base_url.strip().rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        base = "https://" + base  # kamera HP hanya membuka QR yang berawalan skema URL
+    return f"{base}/s/{qr_token}"
 
 
 def outlet_admin(o: dict) -> dict:
