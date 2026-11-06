@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { adminApi } from './adminApi.js'
 import { Field, Table } from './ui.jsx'
 
-const NUM = ['stampsPerReward', 'rewardValueRp', 'maxStampsPerOutletPerDay', 'maxStampsPerDay', 'minMinutesBetweenStamps', 'geofenceM', 'rewardVoucherValidDays', 'redeemCountdownSec']
+const NUM = ['stampsPerReward', 'rewardValueRp', 'maxStampsPerOutletPerDay', 'maxStampsPerDay', 'minMinutesBetweenStamps', 'geofenceM', 'rewardVoucherValidDays', 'redeemCountdownSec', 'rewardRedeemAfterDays', 'maxRedemptionsPerOutletPerDay']
 
 export default function Settings({ ctx }) {
   const [s, setS] = useState(null)
@@ -64,6 +64,8 @@ export default function Settings({ ctx }) {
           <Field label="Maks. stamp / hari"><input className="input" disabled={ro} value={s.maxStampsPerDay} onChange={set('maxStampsPerDay')} /></Field>
           <Field label="Jeda minimal (menit)"><input className="input" disabled={ro} value={s.minMinutesBetweenStamps} onChange={set('minMinutesBetweenStamps')} /></Field>
           <Field label="Geofence (m, hanya flag)"><input className="input" disabled={ro} value={s.geofenceM} onChange={set('geofenceM')} /></Field>
+          <Field label="Reward bisa ditukar H+ (hari)"><input className="input" disabled={ro} value={s.rewardRedeemAfterDays} onChange={set('rewardRedeemAfterDays')} /></Field>
+          <Field label="Kuota penukaran / gerobak / hari (0 = tanpa batas)"><input className="input" disabled={ro} value={s.maxRedemptionsPerOutletPerDay} onChange={set('maxRedemptionsPerOutletPerDay')} /></Field>
         </div>
         <div className="font-extrabold pt-2">Voucher Balik Lagi (member baru)</div>
         <div className="grid md:grid-cols-5 gap-3">

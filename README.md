@@ -47,6 +47,14 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 Role **CRM Lead** (semua), **Manager** (semua kecuali ubah pengaturan/aksi member), **Area** (hanya area yang ditugaskan, nomor dimasker), **Viewer** (baca, nomor dimasker).
 Ringkasan (member baru, aktif 30D, stamp, scan rate, repeat 30D, redemption, Balik Lagi, rating, grafik per hari/jam/minggu, top/bottom outlet, perlu dicek, lonjakan) · Outlet & QR (CRUD, impor CSV, heatmap hari×jam, transaksi POS manual, stiker A6/tent card PDF, ZIP per area, **Ganti QR**) · Member (cari, detail, ±stamp, voucher manual, blokir, hapus/anonimkan — semua dengan alasan → audit log) · Voucher (statistik, campaign per segmen) · Rating · Pengaturan (program, anti-abuse, Balik Lagi, promo aktif, admin, job, audit).
 
+## Anti-fraud crew (lapis 1 + 3)
+- **Batasi kerugian**: aturan stamp di atas + voucher reward baru bisa ditukar **H+1** (`rewardRedeemAfterDays`) + kuota penukaran per gerobak per hari (`maxRedemptionsPerOutletPerDay`, lebih → ditolak ramah + alert).
+- **Hilangkan motif**: daftar **nomor crew & keluarga** (tab Anti-fraud) — tetap bisa scan, tanpa voucher, tidak masuk KPI; jangan beri insentif crew per stamp/member.
+- **Rekonsiliasi**: Ops mengisi "hadiah gratis keluar" per outlet-hari (detail outlet) → dibandingkan dengan voucher yang ditukar; selisih dua arah tampil di tab Anti-fraud.
+- Lapis 2 (deteksi pola: 1 HP banyak nomor, 1 IP banyak nomor, stamp di luar jam buka, member "setia 1 gerobak") dan stamp terikat transaksi QRIS/POS: roadmap.
+
+![Anti-fraud](docs/admin-antifraud.jpg)
+
 ## API ringkas
 Publik: `GET /api/outlet/{token}` · `POST /api/stamp` · `POST /api/feedback` · `POST /api/profile` · `POST /api/voucher/{id}/redeem` · `GET /api/me` · `POST /api/me/opt-out` · `POST /api/me/switch-device` (header `X-Device-Token`).
 Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/public-metrics/ratings|crm|promo|summary` — `crm` memberi `member` & `loyalty` untuk KPI CRM Lead di CRK Daily Tracker.
@@ -56,7 +64,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 15 skenario acceptance (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 20 skenario acceptance (mongomock, tanpa server Mongo)
 ```
 
 ## Roadmap (Iterasi di build spec)

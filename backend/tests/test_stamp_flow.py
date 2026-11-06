@@ -94,6 +94,7 @@ async def test_idempotent_request_id(client, outlets):
 
 async def test_five_stamps_issue_reward_and_redeem_flow(client, outlets):
     db = dbmod.get_db()
+    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0}})  # H+1 diuji di test_antifraud
     res = await stamp(client, outlets[0]["qrToken"], phone="081234567890")
     dev, mid = res["deviceToken"], res["member"]["id"]
     # Simulasikan 4 hari sebelumnya sudah stamp di outlet lain

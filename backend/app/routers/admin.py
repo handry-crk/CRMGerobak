@@ -57,6 +57,7 @@ def member_admin(m: dict, full_phone: bool) -> dict:
         "visits": m.get("visits", 0), "stampsActive": m.get("stampsActive", 0), "stampsTotal": m.get("stampsTotal", 0),
         "rewardsEarned": m.get("rewardsEarned", 0), "lastVisitAt": m.get("lastVisitAt"), "optIn": m.get("optIn", True),
         "blocked": m.get("blocked", False), "devices": len(m.get("deviceTokens") or []), "firstOutletId": m.get("firstOutletId"),
+        "isStaff": bool(m.get("isStaff")),
     }
 
 
@@ -120,8 +121,9 @@ class OutletIn(BaseModel):
 
 class TxIn(BaseModel):
     day: str
-    transactions: int = Field(ge=0)
-    revenue: int = Field(ge=0, default=0)
+    transactions: int | None = Field(ge=0, default=None)
+    revenue: int | None = Field(ge=0, default=None)
+    rewardsGiven: int | None = Field(ge=0, default=None)  # hadiah gratis yang benar-benar keluar (laporan Ops)
 
 
 @router.get("/outlets")
@@ -184,12 +186,71 @@ async def set_transactions(outlet_id: str, body: TxIn, user: dict = Depends(WRIT
     o = await db.outlets.find_one({"_id": outlet_id, **area_filter(user)})
     if not o:
         raise HTTPException(404, {"code": "not_found", "message": "Outlet tidak ditemukan."})
+    upd = {k: v for k, v in body.model_dump().items() if k != "day" and v is not None}
     await db.outlet_transactions.update_one(
         {"outletId": outlet_id, "day": body.day},
-        {"$set": {"transactions": body.transactions, "revenue": body.revenue, "updatedBy": user["name"], "updatedAt": iso(now_utc())}},
+        {"$set": {**upd, "updatedBy": user["name"], "updatedAt": iso(now_utc())}},
         upsert=True,
     )
     return {"ok": True}
+
+
+# ---------- Lapis 3: nomor crew & rekonsiliasi hadiah ----------
+
+class StaffIn(BaseModel):
+    phone: str
+    name: str | None = Field(default=None, max_length=60)
+    outletCode: str | None = None
+    note: str | None = Field(default=None, max_length=120)
+
+
+@router.get("/staff")
+async def list_staff(user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depends(get_db)):
+    return [{**s, "id": s.pop("_id")} async for s in db.staff_numbers.find({}).sort("addedAt", -1)]
+
+
+@router.post("/staff")
+async def add_staff(body: StaffIn, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+    phone = normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(422, {"code": "bad_phone", "message": "Nomor tidak valid."})
+    if await db.staff_numbers.find_one({"phone": phone}):
+        raise HTTPException(409, {"code": "dup", "message": "Nomor sudah terdaftar sebagai crew."})
+    doc = {"_id": new_id("stf"), "phone": phone, "name": body.name, "outletCode": (body.outletCode or "").upper() or None,
+           "note": body.note, "addedBy": user["name"], "addedAt": iso(now_utc())}
+    await db.staff_numbers.insert_one(doc)
+    # Member yang sudah ada dengan nomor ini: tandai staff, voucher yang belum dipakai dihanguskan
+    m = await db.members.find_one({"phone": phone})
+    if m:
+        await db.members.update_one({"_id": m["_id"]}, {"$set": {"isStaff": True}})
+        await db.stamps.update_many({"memberId": m["_id"]}, {"$set": {"isStaff": True}})
+        await db.vouchers.update_many({"memberId": m["_id"], "status": {"$in": ["active", "scheduled"]}}, {"$set": {"status": "expired", "note": "staff"}})
+    await audit(db, user, "staff.add", doc["_id"], {"phone": phone, "name": body.name})
+    doc["id"] = doc.pop("_id")
+    return doc
+
+
+@router.delete("/staff/{staff_id}")
+async def remove_staff(staff_id: str, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+    s = await db.staff_numbers.find_one({"_id": staff_id})
+    if not s:
+        raise HTTPException(404, {"code": "not_found", "message": "Tidak ditemukan."})
+    await db.staff_numbers.delete_one({"_id": staff_id})
+    await db.members.update_one({"phone": s["phone"]}, {"$set": {"isStaff": False}})
+    await audit(db, user, "staff.remove", staff_id, {"phone": s["phone"]})
+    return {"ok": True}
+
+
+@router.get("/reconciliation")
+async def reconciliation(from_: str | None = Query(default=None, alias="from"), to: str | None = None,
+                         user: dict = Depends(current_admin), db: AsyncIOMotorDatabase = Depends(get_db)):
+    to = to or today_wib()
+    from_ = from_ or add_days(to, -13)
+    data = await analytics.reconciliation(db, from_, to, area_filter(user))
+    alerts = [{**a, "id": a.pop("_id")} async for a in db.alerts.find({"day": {"$gte": from_, "$lte": to}}).sort("at", -1).limit(100)]
+    for a in alerts:
+        a.pop("memberId", None)
+    return {**data, "alerts": alerts, "from": from_, "to": to}
 
 
 @router.get("/outlets/{outlet_id}/sticker.pdf")
@@ -445,7 +506,8 @@ async def write_settings(body: dict, user: dict = Depends(LEAD), db: AsyncIOMoto
     upd = {k: v for k, v in body.items() if k in allowed}
     if "welcomeVoucher" in upd:
         upd["welcomeVoucher"] = {**DEFAULT_SETTINGS["welcomeVoucher"], **(upd["welcomeVoucher"] or {})}
-    for k in ("stampsPerReward", "maxStampsPerOutletPerDay", "maxStampsPerDay", "minMinutesBetweenStamps", "geofenceM", "rewardVoucherValidDays", "redeemCountdownSec"):
+    for k in ("stampsPerReward", "maxStampsPerOutletPerDay", "maxStampsPerDay", "minMinutesBetweenStamps", "geofenceM",
+              "rewardVoucherValidDays", "redeemCountdownSec", "rewardRedeemAfterDays", "maxRedemptionsPerOutletPerDay"):
         if k in upd:
             try:
                 upd[k] = int(upd[k])

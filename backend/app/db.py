@@ -28,6 +28,8 @@ DEFAULT_SETTINGS: dict = {
         "validDays": 7,
     },
     "rewardVoucherValidDays": 30,
+    "rewardRedeemAfterDays": 1,          # Lapis 1: reward baru bisa ditukar H+1 (crew harus "kembali besok")
+    "maxRedemptionsPerOutletPerDay": 10,  # Lapis 1: kuota penukaran per gerobak per hari; lebih → ditolak + alert
     "redeemCountdownSec": 180,
     "feedbackPrompt": True,
     "activePromoCode": "",
@@ -100,6 +102,8 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.feedback.create_index([("outletId", 1), ("at", -1)])
     await db.admin_sessions.create_index("token", unique=True)
     await db.job_log.create_index([("job", 1), ("day", 1)])
+    await db.staff_numbers.create_index("phone", unique=True)
+    await db.outlet_transactions.create_index([("outletId", 1), ("day", 1)], unique=True)
 
 
 async def get_settings(db: AsyncIOMotorDatabase) -> dict:

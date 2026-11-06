@@ -56,6 +56,7 @@ async def create_welcome_voucher(db: AsyncIOMotorDatabase, member_id: str, setti
 
 async def create_reward_voucher(db: AsyncIOMotorDatabase, member_id: str, settings: dict) -> dict:
     today = today_wib()
+    valid_from = add_days(today, int(settings.get("rewardRedeemAfterDays", 0)))
     doc = {
         "_id": new_id("vch"),
         "memberId": member_id,
@@ -63,9 +64,9 @@ async def create_reward_voucher(db: AsyncIOMotorDatabase, member_id: str, settin
         "title": settings["rewardTitle"],
         "valueRp": int(settings["rewardValueRp"]),
         "minSpendRp": 0,
-        "validFrom": today,
-        "validTo": add_days(today, int(settings["rewardVoucherValidDays"])),
-        "status": "active",
+        "validFrom": valid_from,
+        "validTo": add_days(valid_from, int(settings["rewardVoucherValidDays"])),
+        "status": "active" if valid_from <= today else "scheduled",
         "createdAt": iso(now_utc()),
     }
     await db.vouchers.insert_one(doc)
@@ -152,6 +153,19 @@ async def redeem_voucher(
     )
     if not recent:
         raise RedeemError("Scan QR gerobak dulu ya, Kak.", "no_outlet")
+
+    # Lapis 1: kuota penukaran per gerobak per hari
+    quota = int(settings.get("maxRedemptionsPerOutletPerDay", 0) or 0)
+    if quota:
+        used_today = await db.vouchers.count_documents(
+            {"status": "used", "usedOutletId": outlet["_id"], "usedAt": {"$gte": today, "$lte": today + "T23:59:59Z"}}
+        )
+        if used_today >= quota:
+            await db.alerts.insert_one({
+                "_id": new_id("alr"), "type": "redeem_quota", "outletId": outlet["_id"], "outletCode": outlet["code"], "memberId": member["_id"],
+                "day": today, "at": iso(now_utc()), "note": f"Kuota {quota} penukaran/hari tercapai",
+            })
+            raise RedeemError("Penukaran di gerobak ini hari ini sudah penuh, Kak. Voucher tetap aman, coba besok ya.", "quota")
 
     now = now_utc()
     code = new_redeem_code()

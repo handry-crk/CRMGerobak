@@ -30,6 +30,7 @@ def member_public(m: dict) -> dict:
         "visits": m.get("visits", 0),
         "joinedAt": m.get("joinedAt"),
         "optIn": m.get("optIn", True),
+        "isStaff": bool(m.get("isStaff")),
         "profileDone": bool(m.get("name")) and bool(m.get("source")),
     }
 
@@ -79,7 +80,9 @@ async def find_or_create_member(
     if member:
         return member, False, None
     now = now_utc()
+    is_staff = await db.staff_numbers.find_one({"phone": phone}) is not None
     member = {
+        "isStaff": is_staff,
         "_id": new_id("mbr"),
         "phone": phone,
         "name": None,
@@ -107,7 +110,7 @@ async def find_or_create_member(
         if existing:
             return existing, False, None
         raise
-    welcome = await create_welcome_voucher(db, member["_id"], settings)
+    welcome = None if is_staff else await create_welcome_voucher(db, member["_id"], settings)
     return member, True, welcome
 
 
@@ -230,6 +233,7 @@ async def process_stamp(
         "requestId": request_id,
         "ip": ip,
         "isNewMember": is_new,
+        "isStaff": bool(member.get("isStaff")),
     }
     await db.stamps.insert_one(stamp)
 
@@ -239,9 +243,12 @@ async def process_stamp(
         stamps_active = int(member.get("stampsActive", 0)) + 1
         inc = {"stampsTotal": 1, "visits": 1}
         if stamps_active >= int(settings["stampsPerReward"]):
-            reward = await create_reward_voucher(db, member["_id"], settings)
             stamps_active = 0
-            inc["rewardsEarned"] = 1
+            if member.get("isStaff"):
+                inc["rewardsSkippedStaff"] = 1  # Lapis 3: crew/keluarga tidak dapat voucher
+            else:
+                reward = await create_reward_voucher(db, member["_id"], settings)
+                inc["rewardsEarned"] = 1
         update["$set"]["stampsActive"] = stamps_active
         update["$inc"] = inc
     await db.members.update_one({"_id": member["_id"]}, update)
@@ -256,9 +263,13 @@ async def build_response(
     per_reward = int(settings["stampsPerReward"])
     active = int(member.get("stampsActive", 0))
     sisa = per_reward - active
-    if stamp["granted"]:
+    if stamp["granted"] and member.get("isStaff"):
+        headline = "Stamp tercatat. Nomor ini terdaftar sebagai crew, jadi tanpa voucher ya."
+    elif stamp["granted"]:
         if reward:
             headline = f"{per_reward} stamp penuh! {settings['rewardTitle']} buat Kakak."
+            if reward.get("status") == "scheduled":
+                headline += " Bisa ditukar mulai besok ya."
         elif is_new:
             headline = "Stamp pertama dapet, Kak! Makasih udah gabung."
         else:
@@ -288,5 +299,5 @@ async def build_response(
         "vouchers": vouchers,
         "welcomeVoucher": next((v for v in vouchers if v["type"] == "balik_lagi"), None) if is_new else None,
         "askProfile": ask_profile,
-        "askFeedback": bool(settings.get("feedbackPrompt", True)) and stamp["granted"],
+        "askFeedback": bool(settings.get("feedbackPrompt", True)) and stamp["granted"] and not member.get("isStaff"),
     }

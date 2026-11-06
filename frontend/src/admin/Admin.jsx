@@ -8,6 +8,7 @@ import Members from './Members.jsx'
 import Vouchers from './Vouchers.jsx'
 import Rating from './Rating.jsx'
 import Settings from './Settings.jsx'
+import AntiFraud from './AntiFraud.jsx'
 import { Toast } from './ui.jsx'
 
 function Login({ onLogin }) {
@@ -44,7 +45,7 @@ function Login({ onLogin }) {
 }
 
 const NAV = [
-  ['', 'Ringkasan'], ['outlet', 'Outlet & QR'], ['member', 'Member'], ['voucher', 'Voucher'], ['rating', 'Rating'], ['pengaturan', 'Pengaturan'],
+  ['', 'Ringkasan'], ['outlet', 'Outlet & QR'], ['member', 'Member'], ['voucher', 'Voucher'], ['rating', 'Rating'], ['antifraud', 'Anti-fraud'], ['pengaturan', 'Pengaturan'],
 ]
 
 export default function Admin() {
@@ -85,6 +86,7 @@ export default function Admin() {
           <Route path="member" element={<Members ctx={ctx} />} />
           <Route path="voucher" element={<Vouchers ctx={ctx} />} />
           <Route path="rating" element={<Rating ctx={ctx} />} />
+          <Route path="antifraud" element={<AntiFraud ctx={ctx} />} />
           <Route path="pengaturan" element={privileged ? <Settings ctx={ctx} /> : <Navigate to="/admin" replace />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>

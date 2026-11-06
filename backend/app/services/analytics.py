@@ -20,7 +20,7 @@ async def outlet_map(db: AsyncIOMotorDatabase, area_q: dict | None = None) -> di
 async def repeat_30d(db: AsyncIOMotorDatabase, outlet_ids: list[str] | None, from_day: str, to_day: str) -> dict:
     """Repeat 30D: member yang gabung ≥ 30 hari lalu (dalam rentang) dengan ≥ 2 kunjungan dalam 30 hari pertama."""
     cutoff = add_days(today_wib(), -30)
-    q: dict = {"joinedDay": {"$gte": from_day, "$lte": min(to_day, cutoff)}}
+    q: dict = {"joinedDay": {"$gte": from_day, "$lte": min(to_day, cutoff)}, "isStaff": {"$ne": True}}
     if outlet_ids is not None:
         q["firstOutletId"] = {"$in": outlet_ids}
     cohort = [m async for m in db.members.find(q, {"_id": 1, "joinedAt": 1})]
@@ -44,7 +44,7 @@ async def summary(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area: st
     outlet_ids = list(outlets.keys())
     restrict = bool(area or area_q)
 
-    stamp_q: dict = {"day": {"$gte": from_day, "$lte": to_day}, "granted": True}
+    stamp_q: dict = {"day": {"$gte": from_day, "$lte": to_day}, "granted": True, "isStaff": {"$ne": True}}
     if restrict:
         stamp_q["outletId"] = {"$in": outlet_ids}
     stamps = [s async for s in db.stamps.find(stamp_q, {"memberId": 1, "outletId": 1, "day": 1, "hour": 1, "isNewMember": 1, "flags": 1, "promoCode": 1})]
@@ -71,13 +71,13 @@ async def summary(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area: st
         if s.get("promoCode"):
             promo_count += 1
 
-    mem_q: dict = {"joinedDay": {"$gte": from_day, "$lte": to_day}}
+    mem_q: dict = {"joinedDay": {"$gte": from_day, "$lte": to_day}, "isStaff": {"$ne": True}}
     if restrict:
         mem_q["firstOutletId"] = {"$in": outlet_ids}
     new_members = await db.members.count_documents(mem_q)
 
     active_since = add_days(today_wib(), -30)
-    act_q: dict = {"day": {"$gte": active_since}, "granted": True}
+    act_q: dict = {"day": {"$gte": active_since}, "granted": True, "isStaff": {"$ne": True}}
     if restrict:
         act_q["outletId"] = {"$in": outlet_ids}
     active_members = len(await db.stamps.distinct("memberId", act_q))
@@ -203,7 +203,7 @@ async def outlet_detail(db: AsyncIOMotorDatabase, outlet: dict, from_day: str, t
         "avgRating": round(sum(ratings) / len(ratings), 2) if ratings else None,
         "heatmap": [{"day": d, "hours": [heat[d].get(h, 0) for h in range(24)]} for d in sorted(heat)],
         "feedback": feedback,
-        "transactions": [{"day": d, "transactions": t.get("transactions", 0), "revenue": t.get("revenue", 0)} for d, t in sorted(tx.items())],
+        "transactions": [{"day": d, "transactions": t.get("transactions"), "revenue": t.get("revenue"), "rewardsGiven": t.get("rewardsGiven")} for d, t in sorted(tx.items())],
         "flags": Counter(f for s in stamps for f in (s.get("flags") or [])),
     }
 
@@ -227,3 +227,28 @@ async def velocity_alerts(db: AsyncIOMotorDatabase) -> list[dict]:
             o = await db.outlets.find_one({"_id": oid})
             alerts.append({"outletId": oid, "outlet": o["name"] if o else oid, "last10min": n, "avg10min": round(avg10, 2)})
     return alerts
+
+
+async def reconciliation(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area_q: dict | None = None) -> dict:
+    """Lapis 3: hadiah keluar (laporan Ops per outlet-day) vs penukaran voucher di sistem."""
+    outlets = await outlet_map(db, area_q or {})
+    redeemed: dict[tuple, int] = defaultdict(int)
+    async for v in db.vouchers.find({"status": "used", "usedAt": {"$gte": from_day, "$lte": to_day + "T23:59:59Z"}}, {"usedOutletId": 1, "usedAt": 1}):
+        if v.get("usedOutletId") in outlets:
+            redeemed[(v["usedOutletId"], v["usedAt"][:10])] += 1
+    reported: dict[tuple, dict] = {}
+    async for t in db.outlet_transactions.find({"day": {"$gte": from_day, "$lte": to_day}, "outletId": {"$in": list(outlets)}}):
+        reported[(t["outletId"], t["day"])] = t
+    rows = []
+    for key in sorted(set(redeemed) | set(reported), key=lambda k: (k[1], outlets[k[0]]["code"])):
+        t = reported.get(key)
+        given = t.get("rewardsGiven") if t else None
+        used = redeemed.get(key, 0)
+        diff = None if given is None else given - used
+        rows.append({
+            "outletId": key[0], "outlet": outlets[key[0]]["name"], "code": outlets[key[0]]["code"], "day": key[1],
+            "redeemed": used, "rewardsGiven": given, "diff": diff,
+            "status": "belum_lapor" if given is None else ("cocok" if diff == 0 else ("hadiah_lebih" if diff > 0 else "voucher_lebih")),
+        })
+    mismatch = [r for r in rows if r["status"] in ("hadiah_lebih", "voucher_lebih")]
+    return {"rows": rows, "mismatch": mismatch, "unreported": sum(1 for r in rows if r["status"] == "belum_lapor")}

@@ -8,7 +8,7 @@ export default function Outlets({ ctx }) {
   const [list, setList] = useState([])
   const [editing, setEditing] = useState(null)
   const [detail, setDetail] = useState(null)
-  const [tx, setTx] = useState({ day: today(), transactions: '', revenue: '' })
+  const [tx, setTx] = useState({ day: today(), transactions: '', revenue: '', rewardsGiven: '' })
   const [filterArea, setFilterArea] = useState('')
   const [q, setQ] = useState('')
 
@@ -37,7 +37,8 @@ export default function Outlets({ ctx }) {
   async function saveTx(e) {
     e.preventDefault()
     try {
-      await adminApi(`/api/admin/outlets/${detail.outlet.id}/transactions`, { method: 'POST', body: { day: tx.day, transactions: Number(tx.transactions || 0), revenue: Number(tx.revenue || 0) } })
+      const num = (v) => (v === '' ? null : Number(v))
+      await adminApi(`/api/admin/outlets/${detail.outlet.id}/transactions`, { method: 'POST', body: { day: tx.day, transactions: num(tx.transactions), revenue: num(tx.revenue), rewardsGiven: num(tx.rewardsGiven) } })
       ctx.notify('Transaksi tersimpan'); openDetail(detail.outlet)
     } catch (e) { ctx.notify(e.message) }
   }
@@ -131,10 +132,11 @@ export default function Outlets({ ctx }) {
                 <Field label="Tanggal"><input type="date" className="input" value={tx.day} onChange={(e) => setTx({ ...tx, day: e.target.value })} /></Field>
                 <Field label="Transaksi (POS)"><input className="input" inputMode="numeric" value={tx.transactions} onChange={(e) => setTx({ ...tx, transactions: e.target.value })} /></Field>
                 <Field label="Revenue (Rp)"><input className="input" inputMode="numeric" value={tx.revenue} onChange={(e) => setTx({ ...tx, revenue: e.target.value })} /></Field>
-                <button className="btn-primary">Simpan transaksi</button>
+                <Field label="Hadiah gratis keluar"><input className="input" inputMode="numeric" value={tx.rewardsGiven} onChange={(e) => setTx({ ...tx, rewardsGiven: e.target.value })} placeholder="laporan Ops" /></Field>
+                <button className="btn-primary">Simpan laporan hari ini</button>
               </form>
             )}
-            {detail.transactions.length > 0 && <div className="text-xs text-charcoal/70">Transaksi tercatat: {detail.transactions.map((t) => `${t.day.slice(5)}: ${t.transactions}`).join(' · ')}</div>}
+            {detail.transactions.length > 0 && <div className="text-xs text-charcoal/70">Transaksi tercatat: {detail.transactions.map((t) => `${t.day.slice(5)}: ${t.transactions ?? '–'} trx / ${t.rewardsGiven ?? '–'} hadiah`).join(' · ')}</div>}
             <div>
               <div className="text-sm font-bold mb-1">Feedback terbaru</div>
               {detail.feedback.length === 0 && <div className="text-sm text-charcoal/60">Belum ada.</div>}
