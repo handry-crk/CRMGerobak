@@ -1,0 +1,20 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+    volumes:
+      - ./backups:/app/backups
+    depends_on:
+      - mongo
+volumes:
+  mongo_data:
