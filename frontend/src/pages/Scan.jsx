@@ -26,13 +26,16 @@ export default function Scan() {
   const [outlet, setOutlet] = useState(null)
   const [busy, setBusy] = useState(false)
   const [formErr, setFormErr] = useState('')
-  const [meta, setMeta] = useState({ productTags: [], serviceTags: [], ratingScale: FALLBACK_SCALE })
+  const [meta, setMeta] = useState({ productTagsByGroup: {}, serviceTagsByGroup: {}, ratingScale: FALLBACK_SCALE })
   const [rating, setRating] = useState(0)
   const [service, setService] = useState(0)
   const [tags, setTags] = useState([])
   const [comment, setComment] = useState('')
   const [fbSaved, setFbSaved] = useState(false)
   const [fbDone, setFbDone] = useState(false)
+  const groupOf = (v) => (v <= 2 ? 'tidak_puas' : v === 3 ? 'biasa' : 'puas')
+  const productOpts = rating ? meta.productTagsByGroup[groupOf(rating)] || [] : []
+  const serviceOpts = service ? meta.serviceTagsByGroup[groupOf(service)] || [] : []
   const [promoOn, setPromoOn] = useState(false)
   const [profile, setProfile] = useState({ name: '', source: '' })
   const [profileDone, setProfileDone] = useState(false)
@@ -89,10 +92,15 @@ export default function Scan() {
 
   // Simpan setiap tap (rasa dulu, pelayanan, lalu tag) — "complete" saat keduanya terisi
   async function sendFeedback(next = {}) {
-    const r = next.rating ?? rating, sv = next.service ?? service, tg = next.tags ?? tags, c = next.comment ?? comment
+    const r = next.rating ?? rating, sv = next.service ?? service, c = next.comment ?? comment
+    let tg = next.tags ?? tags
+    if (next.rating !== undefined || next.service !== undefined) {
+      const ok = new Set([...(r ? meta.productTagsByGroup[groupOf(r)] || [] : []), ...(sv ? meta.serviceTagsByGroup[groupOf(sv)] || [] : [])])
+      tg = tg.filter((t) => ok.has(t))
+    }
     if (next.rating !== undefined) setRating(r)
     if (next.service !== undefined) setService(sv)
-    if (next.tags !== undefined) setTags(tg)
+    setTags(tg)
     if (!r) return
     try {
       const d = await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, service: sv || null, tags: tg, comment: c || null } })
@@ -182,10 +190,10 @@ export default function Scan() {
           <div className={`card ${gate ? 'border-brand' : ''}`}>
             {gate && <div className="text-xs font-bold text-deep mb-2">Isi dua rating ini dulu ya, Kak (10 detik) — voucher langsung bisa dipakai setelahnya.</div>}
             <RatingRow title="Rasa cimolnya gimana?" value={rating} scale={meta.ratingScale} onPick={(v) => sendFeedback({ rating: v })} />
-            {rating > 0 && <TagRow options={meta.productTags} tags={tags} onToggle={toggleTag} />}
+            {rating > 0 && <TagRow options={productOpts} tags={tags} onToggle={toggleTag} />}
             <div className="mt-4" />
             <RatingRow title="Pelayanan crew-nya?" value={service} scale={meta.ratingScale} onPick={(v) => sendFeedback({ service: v })} />
-            {service > 0 && <TagRow options={meta.serviceTags} tags={tags} onToggle={toggleTag} />}
+            {service > 0 && <TagRow options={serviceOpts} tags={tags} onToggle={toggleTag} />}
             {((rating > 0 && rating <= 2) || (service > 0 && service <= 2)) && (
               <div className="mt-3 flex gap-2">
                 <input className="input" maxLength={140} placeholder="Boleh cerita sedikit? (opsional)" value={comment} onChange={(e) => setComment(e.target.value)} />

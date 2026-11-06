@@ -53,8 +53,19 @@ RATING_SCALE = [
     {"value": 5, "emoji": "🤩", "label": "Puas banget", "group": "puas"},
 ]
 RATING_GROUPS = {"tidak_puas": "Tidak puas", "biasa": "Biasa", "puas": "Puas"}
-PRODUCT_TAGS = ("Enak banget", "Bumbu pas", "Kurang panas", "Kurang bumbu", "Porsi kurang")
-SERVICE_TAGS = ("Crew ramah", "Cepat dilayani", "Antre lama", "Crew kurang ramah", "Gerobak kurang bersih")
+# Tag mengikuti emoji yang dipilih: Kecewa/Kurang → keluhan, Biasa aja → campuran, Puas/Puas banget → pujian
+PRODUCT_TAGS_BY_GROUP = {
+    "tidak_puas": ("Kurang panas", "Kurang bumbu", "Porsi kurang", "Terlalu asin", "Kurang kenyal"),
+    "biasa": ("Bumbu pas", "Kurang panas", "Kurang bumbu", "Porsi kurang"),
+    "puas": ("Enak banget", "Bumbu pas", "Masih panas", "Porsi pas"),
+}
+SERVICE_TAGS_BY_GROUP = {
+    "tidak_puas": ("Antre lama", "Crew kurang ramah", "Gerobak kurang bersih", "Pesanan salah", "Pembayaran ribet"),
+    "biasa": ("Crew ramah", "Antre lama", "Gerobak kurang bersih"),
+    "puas": ("Crew ramah", "Cepat dilayani", "Gerobak bersih", "Dibantu pilih menu"),
+}
+PRODUCT_TAGS = tuple(dict.fromkeys(t for g in PRODUCT_TAGS_BY_GROUP.values() for t in g))
+SERVICE_TAGS = tuple(dict.fromkeys(t for g in SERVICE_TAGS_BY_GROUP.values() for t in g))
 FEEDBACK_TAGS = PRODUCT_TAGS + SERVICE_TAGS
 
 

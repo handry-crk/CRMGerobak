@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
-from ..db import FEEDBACK_TAGS, PRODUCT_TAGS, RATING_GROUPS, RATING_SCALE, SERVICE_TAGS, SOURCES, get_db, get_settings, rating_group
+from ..db import (FEEDBACK_TAGS, PRODUCT_TAGS, PRODUCT_TAGS_BY_GROUP, RATING_GROUPS, RATING_SCALE, SERVICE_TAGS,
+                  SERVICE_TAGS_BY_GROUP, SOURCES, get_db, get_settings, rating_group)
 from ..security import client_ip, current_member, enforce_rate
 from ..services import stamp as stamp_svc
 from ..services.stamp import StampError, member_public, outlet_public
@@ -81,7 +82,10 @@ async def post_feedback(body: FeedbackIn, member: dict = Depends(current_member)
     outlet = await db.outlets.find_one({"qrToken": body.qrToken})
     if not outlet:
         raise HTTPException(404, {"code": "qr_unknown", "message": "QR tidak dikenal."})
-    tags = [t for t in body.tags if t in FEEDBACK_TAGS][:6]
+    allowed = set(PRODUCT_TAGS_BY_GROUP[rating_group(body.rating)])
+    if body.service:
+        allowed |= set(SERVICE_TAGS_BY_GROUP[rating_group(body.service)])
+    tags = [t for t in body.tags if t in allowed][:6]
     fields = {
         "rating": body.rating, "ratingGroup": rating_group(body.rating),
         "service": body.service, "serviceGroup": rating_group(body.service) if body.service else None,
@@ -168,4 +172,6 @@ async def switch_device(body: SwitchIn, request: Request, db: AsyncIOMotorDataba
 @router.get("/meta")
 async def meta():
     return {"sources": list(SOURCES), "feedbackTags": list(FEEDBACK_TAGS), "productTags": list(PRODUCT_TAGS),
-            "serviceTags": list(SERVICE_TAGS), "ratingScale": RATING_SCALE, "ratingGroups": RATING_GROUPS}
+            "serviceTags": list(SERVICE_TAGS), "productTagsByGroup": {k: list(v) for k, v in PRODUCT_TAGS_BY_GROUP.items()},
+            "serviceTagsByGroup": {k: list(v) for k, v in SERVICE_TAGS_BY_GROUP.items()},
+            "ratingScale": RATING_SCALE, "ratingGroups": RATING_GROUPS}

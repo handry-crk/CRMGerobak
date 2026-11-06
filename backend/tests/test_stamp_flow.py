@@ -268,7 +268,7 @@ async def test_feedback_required_before_redeem(client, outlets):
     await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4}, headers=h)
     still = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
     assert still.status_code == 409
-    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama"]}, headers=h)
+    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama", "Kurang panas", "Cepat dilayani"]}, headers=h)  # 2 tag terakhir tak cocok kelompok → dibuang
     ok = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
     assert ok.status_code == 200
     fb = await db.feedback.find_one({"stampId": r["stampId"]})
