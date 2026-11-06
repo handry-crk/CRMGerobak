@@ -48,12 +48,38 @@ def get_db() -> AsyncIOMotorDatabase:
     global _client, _db
     if _db is None:
         if config.use_mock_db:
-            from mongomock_motor import AsyncMongoMockClient
-            _client = AsyncMongoMockClient(tz_aware=True)
+            use_mock_client()
         else:
-            _client = AsyncIOMotorClient(config.mongo_url, tz_aware=True)
-        _db = _client[config.mongo_db]
+            _client = AsyncIOMotorClient(config.mongo_url, tz_aware=True, serverSelectionTimeoutMS=5000)
+            _db = _client[config.mongo_db]
     return _db
+
+
+def use_mock_client() -> None:
+    """Database in-memory (mongomock). Data hilang saat proses berhenti."""
+    global _client, _db
+    from mongomock_motor import AsyncMongoMockClient
+    _client = AsyncMongoMockClient(tz_aware=True)
+    _db = _client[config.mongo_db]
+
+
+async def connect_or_fallback() -> AsyncIOMotorDatabase:
+    """Coba MongoDB; bila tidak terjangkau, jatuh ke mock agar aplikasi tetap bisa dicoba."""
+    import logging
+    log = logging.getLogger("db")
+    db = get_db()
+    if config.use_mock_db:
+        log.warning("USE_MOCK_DB=true — database in-memory, DATA TIDAK TERSIMPAN setelah restart.")
+        return db
+    try:
+        await db.command("ping")
+        log.info("MongoDB terhubung: %s", config.mongo_url.split("@")[-1])
+        return db
+    except Exception as e:  # noqa: BLE001
+        log.error("MongoDB tidak terjangkau (%s). Beralih ke database in-memory — DATA TIDAK TERSIMPAN. "
+                  "Isi MONGO_URL yang benar untuk produksi.", e)
+        use_mock_client()
+        return get_db()
 
 
 def set_db(db: AsyncIOMotorDatabase) -> None:

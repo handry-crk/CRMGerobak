@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import config
-from .db import bootstrap, get_db
+from .db import bootstrap, connect_or_fallback
 from .routers import admin, metrics, public
 from .services.jobs import build_scheduler
 
@@ -24,7 +24,7 @@ STATIC_DIR = os.environ.get("STATIC_DIR", os.path.join(os.path.dirname(__file__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = get_db()
+    db = await connect_or_fallback()
     await bootstrap(db)
     scheduler = None
     if config.enable_scheduler:
