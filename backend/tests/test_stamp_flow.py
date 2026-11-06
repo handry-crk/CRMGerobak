@@ -268,8 +268,9 @@ async def test_feedback_required_before_redeem(client, outlets):
     await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4}, headers=h)
     still = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
     assert still.status_code == 409
-    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama", "Kurang panas", "Cepat dilayani"]}, headers=h)  # 2 tag terakhir tak cocok kelompok → dibuang
+    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama", "Kurang panas", "Cepat dilayani"], "serviceNote": "crew main hp", "productNote": "diabaikan karena rasa puas"}, headers=h)  # 2 tag terakhir tak cocok kelompok → dibuang
     ok = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
     assert ok.status_code == 200
     fb = await db.feedback.find_one({"stampId": r["stampId"]})
     assert fb["ratingGroup"] == "puas" and fb["serviceGroup"] == "tidak_puas" and fb["tags"] == ["Antre lama"]
+    assert fb["serviceNote"] == "crew main hp" and fb["productNote"] is None and fb["comment"] == "Pelayanan: crew main hp"

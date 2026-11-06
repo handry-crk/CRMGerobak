@@ -35,6 +35,8 @@ class FeedbackIn(BaseModel):
     service: int | None = Field(default=None, ge=1, le=5)  # pelayanan crew
     tags: list[str] = []
     comment: str | None = Field(default=None, max_length=140)
+    productNote: str | None = Field(default=None, max_length=140)  # ketik manual saat rasa Kecewa/Kurang
+    serviceNote: str | None = Field(default=None, max_length=140)  # ketik manual saat pelayanan Kecewa/Kurang
 
 
 class ProfileIn(BaseModel):
@@ -89,9 +91,16 @@ async def post_feedback(body: FeedbackIn, member: dict = Depends(current_member)
     fields = {
         "rating": body.rating, "ratingGroup": rating_group(body.rating),
         "service": body.service, "serviceGroup": rating_group(body.service) if body.service else None,
-        "tags": tags, "tag": tags[0] if tags else None, "comment": (body.comment or "").strip() or None,
+        "tags": tags, "tag": tags[0] if tags else None,
+        "productNote": (body.productNote or "").strip() or None if body.rating <= 2 else None,
+        "serviceNote": (body.serviceNote or "").strip() or None if (body.service or 5) <= 2 else None,
         "complete": body.service is not None,
     }
+    fields["comment"] = " · ".join(x for x in [
+        f"Rasa: {fields['productNote']}" if fields["productNote"] else None,
+        f"Pelayanan: {fields['serviceNote']}" if fields["serviceNote"] else None,
+        (body.comment or "").strip() or None,
+    ] if x) or None
     if body.stampId and await db.feedback.find_one({"stampId": body.stampId}):
         await db.feedback.update_one({"stampId": body.stampId}, {"$set": fields})
         return {"ok": True, "complete": fields["complete"]}

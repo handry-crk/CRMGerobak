@@ -61,7 +61,7 @@ export default function Rating({ ctx }) {
       <div className="card"><div className="text-sm font-bold mb-2">Rating & komentar terbaru</div>
         <Table cols={[{ key: 'at', label: 'Waktu', render: (f) => fmtTanggal(f.at, { hour: '2-digit', minute: '2-digit' }) }, { key: 'outlet', label: 'Outlet' },
           { key: 'rating', label: 'Rasa', render: (f) => `${emoji(f.rating)} ${f.rating}` }, { key: 'service', label: 'Pelayanan', render: (f) => (f.service ? `${emoji(f.service)} ${f.service}` : '–') },
-          { key: 'tags', label: 'Tag', render: (f) => f.tags.join(', ') || '–' }, { key: 'comment', label: 'Komentar' }]} rows={data.items} /></div>
+          { key: 'tags', label: 'Tag', render: (f) => f.tags.join(', ') || '–' }, { key: 'comment', label: 'Ditulis sendiri' }]} rows={data.items} /></div>
       <p className="text-xs text-charcoal/60">Skala: 😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget. Kelompok: Tidak puas (1–2), Biasa (3), Puas (4–5). Data tersedia untuk Service Excellence Dashboard lewat <code>GET /api/public-metrics/ratings</code>.</p>
     </div>
   )

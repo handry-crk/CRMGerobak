@@ -31,6 +31,8 @@ export default function Scan() {
   const [service, setService] = useState(0)
   const [tags, setTags] = useState([])
   const [comment, setComment] = useState('')
+  const [productNote, setProductNote] = useState('')
+  const [serviceNote, setServiceNote] = useState('')
   const [fbSaved, setFbSaved] = useState(false)
   const [fbDone, setFbDone] = useState(false)
   const groupOf = (v) => (v <= 2 ? 'tidak_puas' : v === 3 ? 'biasa' : 'puas')
@@ -103,7 +105,8 @@ export default function Scan() {
     setTags(tg)
     if (!r) return
     try {
-      const d = await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, service: sv || null, tags: tg, comment: c || null } })
+      const pn = next.productNote ?? productNote, sn = next.serviceNote ?? serviceNote
+      const d = await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, service: sv || null, tags: tg, comment: c || null, productNote: pn || null, serviceNote: sn || null } })
       setFbSaved(true)
       if (d.complete) setFbDone(true)
     } catch { /* abaikan; akan dicoba lagi di tap berikutnya */ }
@@ -190,16 +193,12 @@ export default function Scan() {
           <div className={`card ${gate ? 'border-brand' : ''}`}>
             {gate && <div className="text-xs font-bold text-deep mb-2">Isi dua rating ini dulu ya, Kak (10 detik) — voucher langsung bisa dipakai setelahnya.</div>}
             <RatingRow title="Rasa cimolnya gimana?" value={rating} scale={meta.ratingScale} onPick={(v) => sendFeedback({ rating: v })} />
-            {rating > 0 && <TagRow options={productOpts} tags={tags} onToggle={toggleTag} />}
+            {rating > 0 && <TagRow options={productOpts} tags={tags} onToggle={toggleTag}
+              other={rating <= 2 ? { value: productNote, set: setProductNote, save: () => sendFeedback({ productNote }), placeholder: 'Contoh: cimolnya alot, bumbunya beda' } : null} />}
             <div className="mt-4" />
             <RatingRow title="Pelayanan crew-nya?" value={service} scale={meta.ratingScale} onPick={(v) => sendFeedback({ service: v })} />
-            {service > 0 && <TagRow options={serviceOpts} tags={tags} onToggle={toggleTag} />}
-            {((rating > 0 && rating <= 2) || (service > 0 && service <= 2)) && (
-              <div className="mt-3 flex gap-2">
-                <input className="input" maxLength={140} placeholder="Boleh cerita sedikit? (opsional)" value={comment} onChange={(e) => setComment(e.target.value)} />
-                <button className="btn-ghost" onClick={() => sendFeedback({ comment })}>Kirim</button>
-              </div>
-            )}
+            {service > 0 && <TagRow options={serviceOpts} tags={tags} onToggle={toggleTag}
+              other={service <= 2 ? { value: serviceNote, set: setServiceNote, save: () => sendFeedback({ serviceNote }), placeholder: 'Contoh: crew main HP, kembalian kurang' } : null} />}
             {fbDone && <div className="mt-3 text-sm text-okgreen font-bold">Makasih, Kak! Masukannya nyampe ke tim.</div>}
             {!fbDone && fbSaved && <div className="mt-2 text-xs text-charcoal/60">Satu lagi ya, Kak.</div>}
           </div>
@@ -274,10 +273,22 @@ function RatingRow({ title, value, scale, onPick }) {
   )
 }
 
-function TagRow({ options, tags, onToggle }) {
+function TagRow({ options, tags, onToggle, other }) {
+  const [open, setOpen] = useState(!!other?.value)
+  const [saved, setSaved] = useState(false)
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {options.map((t) => <button key={t} className={`chip min-h-[40px] ${tags.includes(t) ? 'chip-on' : ''}`} onClick={() => onToggle(t)}>{t}</button>)}
+    <div className="mt-2">
+      <div className="flex flex-wrap gap-2">
+        {options.map((t) => <button key={t} className={`chip min-h-[40px] ${tags.includes(t) ? 'chip-on' : ''}`} onClick={() => onToggle(t)}>{t}</button>)}
+        {other && <button className={`chip min-h-[40px] ${open ? 'chip-on' : ''}`} onClick={() => setOpen(!open)}>Lainnya, tulis sendiri…</button>}
+      </div>
+      {other && open && (
+        <div className="mt-2 flex gap-2">
+          <input className="input" maxLength={140} placeholder={other.placeholder} value={other.value}
+            onChange={(e) => { other.set(e.target.value); setSaved(false) }} onBlur={() => { if (other.value.trim()) { other.save(); setSaved(true) } }} />
+          <button className="btn-ghost" onClick={() => { other.save(); setSaved(true) }}>{saved ? 'Tersimpan' : 'Simpan'}</button>
+        </div>
+      )}
     </div>
   )
 }
