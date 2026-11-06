@@ -106,8 +106,15 @@ async def summary(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area: st
     fq: dict = {"at": {"$gte": from_day, "$lte": to_day + "T23:59:59Z"}}
     if restrict:
         fq["outletId"] = {"$in": outlet_ids}
-    ratings = [f["rating"] async for f in db.feedback.find(fq, {"rating": 1})]
+    ratings, services, groups = [], [], Counter()
+    async for f in db.feedback.find(fq, {"rating": 1, "service": 1}):
+        ratings.append(f["rating"])
+        groups["puas" if f["rating"] >= 4 else ("biasa" if f["rating"] == 3 else "tidak_puas")] += 1
+        if f.get("service"):
+            services.append(f["service"])
     avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
+    avg_service = round(sum(services) / len(services), 2) if services else None
+    csat = _pct(groups["puas"], len(ratings))
 
     rep = await repeat_30d(db, outlet_ids if restrict else None, from_day, to_day)
 
@@ -148,7 +155,8 @@ async def summary(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area: st
             "repeat30d": rep,
             "rewardIssued": reward_issued, "rewardUsed": reward_used, "redemptionPct": _pct(reward_used, reward_issued),
             "balikLagiIssued": bl_issued, "balikLagiUsed": bl_used, "balikLagiPct": _pct(bl_used, bl_issued),
-            "avgRating": avg_rating, "ratings": len(ratings),
+            "avgRating": avg_rating, "avgService": avg_service, "ratings": len(ratings), "csatPct": csat,
+            "satisfaction": {"puas": groups["puas"], "biasa": groups["biasa"], "tidak_puas": groups["tidak_puas"]},
             "promoStamps": promo_count,
         },
         "charts": {
@@ -192,7 +200,7 @@ async def outlet_detail(db: AsyncIOMotorDatabase, outlet: dict, from_day: str, t
     for s in stamps:
         heat[s["day"]][s.get("hour", 0)] += 1
     feedback = [
-        {"at": f["at"], "rating": f["rating"], "tag": f.get("tag"), "comment": f.get("comment")}
+        {"at": f["at"], "rating": f["rating"], "service": f.get("service"), "tags": f.get("tags") or ([f["tag"]] if f.get("tag") else []), "comment": f.get("comment")}
         async for f in db.feedback.find({"outletId": outlet["_id"]}).sort("at", -1).limit(50)
     ]
     ratings = [f["rating"] for f in feedback]

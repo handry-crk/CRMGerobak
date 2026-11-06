@@ -154,6 +154,11 @@ async def redeem_voucher(
     if not recent:
         raise RedeemError("Scan QR gerobak dulu ya, Kak.", "no_outlet")
 
+    if settings.get("feedbackRequired", True) and recent.get("granted") and not member.get("isStaff"):
+        fb = await db.feedback.find_one({"stampId": recent["_id"], "complete": True})
+        if not fb:
+            raise RedeemError("Isi rating rasa & pelayanan dulu ya, Kak, baru voucher bisa ditukar.", "need_feedback")
+
     # Lapis 1: kuota penukaran per gerobak per hari
     quota = int(settings.get("maxRedemptionsPerOutletPerDay", 0) or 0)
     if quota:

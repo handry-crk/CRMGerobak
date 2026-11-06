@@ -94,7 +94,7 @@ async def test_idempotent_request_id(client, outlets):
 
 async def test_five_stamps_issue_reward_and_redeem_flow(client, outlets):
     db = dbmod.get_db()
-    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0}})  # H+1 diuji di test_antifraud
+    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "feedbackRequired": False}})  # H+1 diuji di test_antifraud
     res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     dev, mid = res["deviceToken"], res["member"]["id"]
     # Simulasikan 4 hari sebelumnya sudah stamp di outlet lain
@@ -156,8 +156,8 @@ async def test_flagged_member_appears_in_summary(client, admin, outlets):
 async def test_feedback_and_profile(client, outlets):
     res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     h = {"X-Device-Token": res["deviceToken"]}
-    r = await client.post("/api/feedback", json={"qrToken": outlets[0]["qrToken"], "stampId": res["stampId"], "rating": 5, "tag": "Enak banget"}, headers=h)
-    assert r.status_code == 200
+    r = await client.post("/api/feedback", json={"qrToken": outlets[0]["qrToken"], "stampId": res["stampId"], "rating": 5, "service": 4, "tags": ["Enak banget", "Crew ramah"]}, headers=h)
+    assert r.status_code == 200 and r.json()["complete"] is True
     r = await client.post("/api/profile", json={"name": "Dina", "source": "Instagram"}, headers=h)
     assert r.status_code == 200 and r.json()["member"]["name"] == "Dina"
     me = await client.get("/api/me", headers=h)
@@ -250,3 +250,26 @@ async def test_phone_formats_unified_to_08_and_name_required(client, outlets):
     again = await client.post("/api/stamp", json={"qrToken": outlets[1]["qrToken"], "requestId": rid(), "phone": "6281234567890"})
     assert again.status_code == 200 and again.json()["member"]["id"] == m["_id"]  # nomor sama, bukan member baru
     assert again.json()["isNewMember"] is False
+
+
+async def test_feedback_required_before_redeem(client, outlets):
+    db = dbmod.get_db()
+    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "minMinutesBetweenStamps": 0}})
+    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
+    assert res["feedbackRequired"] is True
+    await db.members.update_one({"_id": res["member"]["id"]}, {"$set": {"stampsActive": 4}})
+    r = await stamp(client, outlets[1]["qrToken"], deviceToken=res["deviceToken"])
+    reward = next(v for v in r["vouchers"] if v["type"] == "stamp_reward")
+    h = {"X-Device-Token": res["deviceToken"]}
+    body = {"qrToken": outlets[1]["qrToken"]}
+    blocked = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
+    assert blocked.status_code == 409 and blocked.json()["detail"]["code"] == "need_feedback"
+    # rating rasa saja belum cukup
+    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4}, headers=h)
+    still = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
+    assert still.status_code == 409
+    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama"]}, headers=h)
+    ok = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
+    assert ok.status_code == 200
+    fb = await db.feedback.find_one({"stampId": r["stampId"]})
+    assert fb["ratingGroup"] == "puas" and fb["serviceGroup"] == "tidak_puas" and fb["tags"] == ["Antre lama"]

@@ -3,7 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import { api, getDevice, rememberQr, requestId, setDevice } from '../api.js'
 import { Confetti, Dots, Header, PhoneForm, RedeemFlow, VoucherCard } from '../components/Shared.jsx'
 
-const EMOJI = ['😖', '😕', '🙂', '😄', '🤩']
+const FALLBACK_SCALE = [
+  { value: 1, emoji: '😖', label: 'Kecewa' }, { value: 2, emoji: '😕', label: 'Kurang' }, { value: 3, emoji: '🙂', label: 'Biasa aja' },
+  { value: 4, emoji: '😄', label: 'Puas' }, { value: 5, emoji: '🤩', label: 'Puas banget' },
+]
 
 function getPosition(timeoutMs = 1500) {
   return new Promise((resolve) => {
@@ -23,11 +26,13 @@ export default function Scan() {
   const [outlet, setOutlet] = useState(null)
   const [busy, setBusy] = useState(false)
   const [formErr, setFormErr] = useState('')
-  const [tags, setTags] = useState([])
+  const [meta, setMeta] = useState({ productTags: [], serviceTags: [], ratingScale: FALLBACK_SCALE })
   const [rating, setRating] = useState(0)
-  const [tag, setTag] = useState('')
+  const [service, setService] = useState(0)
+  const [tags, setTags] = useState([])
   const [comment, setComment] = useState('')
   const [fbSaved, setFbSaved] = useState(false)
+  const [fbDone, setFbDone] = useState(false)
   const [promoOn, setPromoOn] = useState(false)
   const [profile, setProfile] = useState({ name: '', source: '' })
   const [profileDone, setProfileDone] = useState(false)
@@ -62,7 +67,7 @@ export default function Scan() {
   }, [token])
 
   useEffect(() => {
-    api('/api/meta', { device: false }).then((m) => { setTags(m.feedbackTags); setSources(m.sources) }).catch(() => {})
+    api('/api/meta', { device: false }).then((m) => { setMeta(m); setSources(m.sources) }).catch(() => {})
   }, [])
 
   function apply(res) {
@@ -82,13 +87,20 @@ export default function Scan() {
     } finally { setBusy(false) }
   }
 
-  async function sendFeedback(r, t = tag, c = comment) {
-    setRating(r)
+  // Simpan setiap tap (rasa dulu, pelayanan, lalu tag) — "complete" saat keduanya terisi
+  async function sendFeedback(next = {}) {
+    const r = next.rating ?? rating, sv = next.service ?? service, tg = next.tags ?? tags, c = next.comment ?? comment
+    if (next.rating !== undefined) setRating(r)
+    if (next.service !== undefined) setService(sv)
+    if (next.tags !== undefined) setTags(tg)
+    if (!r) return
     try {
-      await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, tag: t || null, comment: c || null } })
+      const d = await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, service: sv || null, tags: tg, comment: c || null } })
       setFbSaved(true)
-    } catch { /* diam saja; feedback opsional */ }
+      if (d.complete) setFbDone(true)
+    } catch { /* abaikan; akan dicoba lagi di tap berikutnya */ }
   }
+  const toggleTag = (t) => sendFeedback({ tags: tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t].slice(0, 4) })
 
   async function togglePromo() {
     const next = !promoOn
@@ -147,7 +159,8 @@ export default function Scan() {
   }
 
   const { res } = state
-  const canRedeem = true // sesi outlet aktif karena baru saja scan di sini
+  const gate = !!res.feedbackRequired && !fbDone // rating rasa + pelayanan wajib sebelum lanjut
+  const canRedeem = !gate // sesi outlet aktif karena baru saja scan di sini
   const activeVouchers = res.vouchers.filter((v) => v.status === 'active')
   const otherVouchers = res.vouchers.filter((v) => v.status !== 'active')
 
@@ -166,39 +179,32 @@ export default function Scan() {
 
       {res.askFeedback && outlet.feedbackPrompt && (
         <section className="px-4 mt-6">
-          <div className="card">
-            <div className="font-bold text-sm">Gimana cimolnya hari ini?</div>
-            <div className="mt-2 flex justify-between">
-              {EMOJI.map((e, i) => (
-                <button key={i} aria-label={`${i + 1} dari 5`} onClick={() => sendFeedback(i + 1)}
-                  className={`w-12 h-12 text-2xl rounded-xl ${rating === i + 1 ? 'bg-tint ring-2 ring-brand' : 'bg-white'}`}>{e}</button>
-              ))}
-            </div>
-            {rating > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {tags.map((t) => (
-                  <button key={t} className={`chip ${tag === t ? 'chip-on' : ''}`} onClick={() => { setTag(t); sendFeedback(rating, t) }}>{t}</button>
-                ))}
-              </div>
-            )}
-            {rating > 0 && rating <= 2 && (
+          <div className={`card ${gate ? 'border-brand' : ''}`}>
+            {gate && <div className="text-xs font-bold text-deep mb-2">Isi dua rating ini dulu ya, Kak (10 detik) — voucher langsung bisa dipakai setelahnya.</div>}
+            <RatingRow title="Rasa cimolnya gimana?" value={rating} scale={meta.ratingScale} onPick={(v) => sendFeedback({ rating: v })} />
+            {rating > 0 && <TagRow options={meta.productTags} tags={tags} onToggle={toggleTag} />}
+            <div className="mt-4" />
+            <RatingRow title="Pelayanan crew-nya?" value={service} scale={meta.ratingScale} onPick={(v) => sendFeedback({ service: v })} />
+            {service > 0 && <TagRow options={meta.serviceTags} tags={tags} onToggle={toggleTag} />}
+            {((rating > 0 && rating <= 2) || (service > 0 && service <= 2)) && (
               <div className="mt-3 flex gap-2">
                 <input className="input" maxLength={140} placeholder="Boleh cerita sedikit? (opsional)" value={comment} onChange={(e) => setComment(e.target.value)} />
-                <button className="btn-ghost" onClick={() => sendFeedback(rating, tag, comment)}>Kirim</button>
+                <button className="btn-ghost" onClick={() => sendFeedback({ comment })}>Kirim</button>
               </div>
             )}
-            {fbSaved && <div className="mt-2 text-xs text-okgreen font-bold">Makasih, Kak! Masukannya nyampe.</div>}
+            {fbDone && <div className="mt-3 text-sm text-okgreen font-bold">Makasih, Kak! Masukannya nyampe ke tim.</div>}
+            {!fbDone && fbSaved && <div className="mt-2 text-xs text-charcoal/60">Satu lagi ya, Kak.</div>}
           </div>
         </section>
       )}
 
-      {res.granted && outlet.promoCode && outlet.promoQuestion && (
+      {!gate && res.granted && outlet.promoCode && outlet.promoQuestion && (
         <section className="px-4 mt-4">
           <button className={`chip w-full justify-center ${promoOn ? 'chip-on' : ''}`} onClick={togglePromo}>{promoOn ? '✓ ' : ''}{outlet.promoQuestion}</button>
         </section>
       )}
 
-      {res.askProfile && !profileDone && (
+      {!gate && res.askProfile && !profileDone && (
         <section className="px-4 mt-4">
           <div className="card">
             {!res.member.name && (
@@ -222,7 +228,7 @@ export default function Scan() {
       {activeVouchers.length > 0 && (
         <section className="px-4 mt-6 space-y-3">
           <div className="font-extrabold">Voucher Kakak</div>
-          {activeVouchers.map((v) => <VoucherCard key={v.id} v={v} canRedeem={canRedeem} onRedeem={setRedeem} />)}
+          {activeVouchers.map((v) => <VoucherCard key={v.id} v={v} canRedeem={canRedeem} onRedeem={setRedeem} hint="Isi rating di atas dulu ya, Kak." />)}
         </section>
       )}
       {otherVouchers.filter((v) => v.status === 'scheduled' && !(res.isNewMember && res.welcomeVoucher?.id === v.id)).length > 0 && (
@@ -240,5 +246,30 @@ export default function Scan() {
           onClose={() => setRedeem(null)} onUsed={onUsed} />
       )}
     </main>
+  )
+}
+
+function RatingRow({ title, value, scale, onPick }) {
+  return (
+    <div>
+      <div className="font-bold text-sm">{title}</div>
+      <div className="mt-2 grid grid-cols-5 gap-1">
+        {scale.map((o) => (
+          <button key={o.value} aria-label={`${title} ${o.label} (${o.value} dari 5)`} onClick={() => onPick(o.value)}
+            className={`flex flex-col items-center justify-center min-h-[64px] rounded-xl px-1 ${value === o.value ? 'bg-tint ring-2 ring-brand' : 'bg-white'}`}>
+            <span className="text-2xl leading-none">{o.emoji}</span>
+            <span className="text-[10px] font-bold mt-1 leading-tight text-center">{o.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TagRow({ options, tags, onToggle }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {options.map((t) => <button key={t} className={`chip min-h-[40px] ${tags.includes(t) ? 'chip-on' : ''}`} onClick={() => onToggle(t)}>{t}</button>)}
+    </div>
   )
 }

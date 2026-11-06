@@ -26,14 +26,20 @@ async def ratings(from_: str | None = Query(default=None, alias="from"), to: str
     async for f in db.feedback.find({"at": {"$gte": from_, "$lte": to + "T23:59:59Z"}}):
         o = outlets.get(f["outletId"])
         row = agg.setdefault(f["outletId"], {"outletCode": o["code"] if o else None, "outlet": o["name"] if o else None,
-                                              "area": f.get("area"), "n": 0, "sum": 0, "tags": {}})
+                                              "area": f.get("area"), "n": 0, "sum": 0, "ns": 0, "sums": 0, "puas": 0, "tags": {}})
         row["n"] += 1
         row["sum"] += f["rating"]
-        if f.get("tag"):
-            row["tags"][f["tag"]] = row["tags"].get(f["tag"], 0) + 1
-    out = [{**r, "avg": round(r["sum"] / r["n"], 2)} for r in agg.values()]
+        row["puas"] += 1 if f["rating"] >= 4 else 0
+        if f.get("service"):
+            row["ns"] += 1
+            row["sums"] += f["service"]
+        for t in f.get("tags") or ([f["tag"]] if f.get("tag") else []):
+            row["tags"][t] = row["tags"].get(t, 0) + 1
+    out = [{**r, "avg": round(r["sum"] / r["n"], 2), "avgService": round(r["sums"] / r["ns"], 2) if r["ns"] else None,
+            "csatPct": round(r["puas"] / r["n"] * 100, 1)} for r in agg.values()]
     for r in out:
-        r.pop("sum")
+        for k in ("sum", "ns", "sums", "puas"):
+            r.pop(k)
     return {"from": from_, "to": to, "outlets": out}
 
 

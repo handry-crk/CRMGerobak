@@ -305,4 +305,5 @@ async def build_response(
         "welcomeVoucher": next((v for v in vouchers if v["type"] == "balik_lagi"), None) if is_new else None,
         "askProfile": ask_profile,
         "askFeedback": bool(settings.get("feedbackPrompt", True)) and stamp["granted"] and not member.get("isStaff"),
+        "feedbackRequired": bool(settings.get("feedbackRequired", True)) and stamp["granted"] and not member.get("isStaff"),
     }

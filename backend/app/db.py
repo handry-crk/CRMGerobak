@@ -32,6 +32,7 @@ DEFAULT_SETTINGS: dict = {
     "maxRedemptionsPerOutletPerDay": 10,  # Lapis 1: kuota penukaran per gerobak per hari; lebih → ditolak + alert
     "redeemCountdownSec": 180,
     "feedbackPrompt": True,
+    "feedbackRequired": True,  # rating rasa + pelayanan wajib sebelum voucher bisa ditukar
     "activePromoCode": "",
     "activePromoQuestion": "",
     "adminEmail": "",
@@ -43,7 +44,22 @@ DEFAULT_SETTINGS: dict = {
 ADMIN_ROLES = ("CRM Lead", "Manager", "Area", "Viewer")
 AREAS = ("Jakarta", "Bandung", "Bekasi", "Depok", "Bogor", "Tangsel", "Tangerang")
 SOURCES = ("Lewat gerobak", "Instagram", "TikTok", "Teman", "GoFood/GrabFood", "Lainnya")
-FEEDBACK_TAGS = ("Enak banget", "Bumbu pas", "Antre lama", "Kurang panas", "Kurang bumbu", "Crew ramah")
+# Skala kepuasan 1–5 dengan emoji & label; dikelompokkan: 1–2 Tidak puas, 3 Biasa, 4–5 Puas
+RATING_SCALE = [
+    {"value": 1, "emoji": "😖", "label": "Kecewa", "group": "tidak_puas"},
+    {"value": 2, "emoji": "😕", "label": "Kurang", "group": "tidak_puas"},
+    {"value": 3, "emoji": "🙂", "label": "Biasa aja", "group": "biasa"},
+    {"value": 4, "emoji": "😄", "label": "Puas", "group": "puas"},
+    {"value": 5, "emoji": "🤩", "label": "Puas banget", "group": "puas"},
+]
+RATING_GROUPS = {"tidak_puas": "Tidak puas", "biasa": "Biasa", "puas": "Puas"}
+PRODUCT_TAGS = ("Enak banget", "Bumbu pas", "Kurang panas", "Kurang bumbu", "Porsi kurang")
+SERVICE_TAGS = ("Crew ramah", "Cepat dilayani", "Antre lama", "Crew kurang ramah", "Gerobak kurang bersih")
+FEEDBACK_TAGS = PRODUCT_TAGS + SERVICE_TAGS
+
+
+def rating_group(v: int) -> str:
+    return "tidak_puas" if v <= 2 else ("biasa" if v == 3 else "puas")
 
 
 def get_db() -> AsyncIOMotorDatabase:

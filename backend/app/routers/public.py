@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
-from ..db import FEEDBACK_TAGS, SOURCES, get_db, get_settings
+from ..db import FEEDBACK_TAGS, PRODUCT_TAGS, RATING_GROUPS, RATING_SCALE, SERVICE_TAGS, SOURCES, get_db, get_settings, rating_group
 from ..security import client_ip, current_member, enforce_rate
 from ..services import stamp as stamp_svc
 from ..services.stamp import StampError, member_public, outlet_public
@@ -30,8 +30,9 @@ class StampIn(BaseModel):
 class FeedbackIn(BaseModel):
     qrToken: str
     stampId: str | None = None
-    rating: int = Field(ge=1, le=5)
-    tag: str | None = None
+    rating: int = Field(ge=1, le=5)            # rasa cimol
+    service: int | None = Field(default=None, ge=1, le=5)  # pelayanan crew
+    tags: list[str] = []
     comment: str | None = Field(default=None, max_length=140)
 
 
@@ -80,30 +81,21 @@ async def post_feedback(body: FeedbackIn, member: dict = Depends(current_member)
     outlet = await db.outlets.find_one({"qrToken": body.qrToken})
     if not outlet:
         raise HTTPException(404, {"code": "qr_unknown", "message": "QR tidak dikenal."})
-    if body.tag and body.tag not in FEEDBACK_TAGS:
-        raise HTTPException(422, {"code": "bad_tag", "message": "Tag tidak dikenal."})
-    if body.stampId:
-        if await db.feedback.find_one({"stampId": body.stampId}):
-            await db.feedback.update_one(
-                {"stampId": body.stampId},
-                {"$set": {"rating": body.rating, "tag": body.tag, "comment": body.comment}},
-            )
-            return {"ok": True}
-    await db.feedback.insert_one(
-        {
-            "_id": new_id("fbk"),
-            "memberId": member["_id"],
-            "outletId": outlet["_id"],
-            "outletCode": outlet["code"],
-            "area": outlet["area"],
-            "stampId": body.stampId,
-            "rating": body.rating,
-            "tag": body.tag,
-            "comment": (body.comment or "").strip() or None,
-            "at": iso(now_utc()),
-        }
-    )
-    return {"ok": True}
+    tags = [t for t in body.tags if t in FEEDBACK_TAGS][:6]
+    fields = {
+        "rating": body.rating, "ratingGroup": rating_group(body.rating),
+        "service": body.service, "serviceGroup": rating_group(body.service) if body.service else None,
+        "tags": tags, "tag": tags[0] if tags else None, "comment": (body.comment or "").strip() or None,
+        "complete": body.service is not None,
+    }
+    if body.stampId and await db.feedback.find_one({"stampId": body.stampId}):
+        await db.feedback.update_one({"stampId": body.stampId}, {"$set": fields})
+        return {"ok": True, "complete": fields["complete"]}
+    await db.feedback.insert_one({
+        "_id": new_id("fbk"), "memberId": member["_id"], "outletId": outlet["_id"], "outletCode": outlet["code"],
+        "area": outlet["area"], "stampId": body.stampId, "at": iso(now_utc()), **fields,
+    })
+    return {"ok": True, "complete": fields["complete"]}
 
 
 @router.post("/profile")
@@ -175,4 +167,5 @@ async def switch_device(body: SwitchIn, request: Request, db: AsyncIOMotorDataba
 
 @router.get("/meta")
 async def meta():
-    return {"sources": list(SOURCES), "feedbackTags": list(FEEDBACK_TAGS)}
+    return {"sources": list(SOURCES), "feedbackTags": list(FEEDBACK_TAGS), "productTags": list(PRODUCT_TAGS),
+            "serviceTags": list(SERVICE_TAGS), "ratingScale": RATING_SCALE, "ratingGroups": RATING_GROUPS}

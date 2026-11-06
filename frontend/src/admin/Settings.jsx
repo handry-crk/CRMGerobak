@@ -82,6 +82,7 @@ export default function Settings({ ctx }) {
         <div className="grid md:grid-cols-4 gap-3">
           <Field label="Hitung mundur tukar (detik)"><input className="input" disabled={ro} value={s.redeemCountdownSec} onChange={set('redeemCountdownSec')} /></Field>
           <label className="flex items-center gap-2 text-sm pt-6"><input type="checkbox" disabled={ro} checked={s.feedbackPrompt} onChange={set('feedbackPrompt')} /> Tanya rating</label>
+          <label className="flex items-center gap-2 text-sm pt-6"><input type="checkbox" disabled={ro} checked={s.feedbackRequired} onChange={set('feedbackRequired')} /> Rating wajib sebelum voucher bisa ditukar</label>
           <Field label="Kode promo aktif"><input className="input" disabled={ro} value={s.activePromoCode || ''} onChange={set('activePromoCode')} placeholder="MOZZA-DUO" /></Field>
           <Field label="Pertanyaan promo"><input className="input" disabled={ro} value={s.activePromoQuestion || ''} onChange={set('activePromoQuestion')} placeholder="Beli Mozza Duo hari ini?" /></Field>
         </div>

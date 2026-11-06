@@ -11,7 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
 from ..config import config
-from ..db import ADMIN_ROLES, AREAS, DEFAULT_SETTINGS, get_db, get_settings
+from ..db import ADMIN_ROLES, AREAS, DEFAULT_SETTINGS, RATING_GROUPS, RATING_SCALE, get_db, get_settings, rating_group
 from ..security import (
     admin_login, admin_public, area_filter, can_see_full_phone, current_admin, new_pin_hash, require_roles,
 )
@@ -342,7 +342,8 @@ async def member_detail(member_id: str, user: dict = Depends(current_admin), db:
                "reason": s.get("reason"), "flags": s.get("flags", []), "distanceM": s.get("distanceM"), "promoCode": s.get("promoCode")}
               async for s in db.stamps.find({"memberId": member_id}).sort("at", -1).limit(100)]
     vouchers = [voucher_public(v) async for v in db.vouchers.find({"memberId": member_id}).sort("createdAt", -1)]
-    feedback = [{"at": f["at"], "outlet": outlets.get(f["outletId"]), "rating": f["rating"], "tag": f.get("tag"), "comment": f.get("comment")}
+    feedback = [{"at": f["at"], "outlet": outlets.get(f["outletId"]), "rating": f["rating"], "service": f.get("service"),
+                 "tag": ", ".join(f.get("tags") or ([f["tag"]] if f.get("tag") else [])), "comment": f.get("comment")}
                 async for f in db.feedback.find({"memberId": member_id}).sort("at", -1)]
     return {"member": member_admin(m, can_see_full_phone(user)), "stamps": stamps, "vouchers": vouchers, "feedback": feedback}
 
@@ -478,17 +479,31 @@ async def list_feedback(from_: str | None = Query(default=None, alias="from"), t
     if max_rating:
         q["rating"] = {"$lte": max_rating}
     outlets = {o["_id"]: o["name"] async for o in db.outlets.find({}, {"name": 1})}
-    items, per_outlet, dist, tags = [], {}, {i: 0 for i in range(1, 6)}, {}
-    async for f in db.feedback.find(q).sort("at", -1).limit(500):
-        items.append({"at": f["at"], "outlet": outlets.get(f["outletId"]), "area": f.get("area"), "rating": f["rating"], "tag": f.get("tag"), "comment": f.get("comment")})
-        po = per_outlet.setdefault(f["outletId"], {"outlet": outlets.get(f["outletId"]), "n": 0, "sum": 0})
+    items, per_outlet, dist, dist_s, tags = [], {}, {i: 0 for i in range(1, 6)}, {i: 0 for i in range(1, 6)}, {}
+    groups = {"puas": 0, "biasa": 0, "tidak_puas": 0}
+    groups_s = {"puas": 0, "biasa": 0, "tidak_puas": 0}
+    async for f in db.feedback.find(q).sort("at", -1).limit(1000):
+        ftags = f.get("tags") or ([f["tag"]] if f.get("tag") else [])
+        items.append({"at": f["at"], "outlet": outlets.get(f["outletId"]), "area": f.get("area"), "rating": f["rating"],
+                      "service": f.get("service"), "tags": ftags, "comment": f.get("comment")})
+        po = per_outlet.setdefault(f["outletId"], {"outlet": outlets.get(f["outletId"]), "n": 0, "sum": 0, "ns": 0, "sums": 0, "puas": 0})
         po["n"] += 1
         po["sum"] += f["rating"]
+        po["puas"] += 1 if f["rating"] >= 4 else 0
         dist[f["rating"]] += 1
-        if f.get("tag"):
-            tags[f["tag"]] = tags.get(f["tag"], 0) + 1
-    per = sorted(({"outlet": v["outlet"], "n": v["n"], "avg": round(v["sum"] / v["n"], 2)} for v in per_outlet.values()), key=lambda r: -r["n"])
-    return {"items": items, "perOutlet": per, "distribution": dist, "tags": tags}
+        groups[rating_group(f["rating"])] += 1
+        if f.get("service"):
+            po["ns"] += 1
+            po["sums"] += f["service"]
+            dist_s[f["service"]] += 1
+            groups_s[rating_group(f["service"])] += 1
+        for t in ftags:
+            tags[t] = tags.get(t, 0) + 1
+    per = sorted(({"outlet": v["outlet"], "n": v["n"], "avg": round(v["sum"] / v["n"], 2),
+                   "avgService": round(v["sums"] / v["ns"], 2) if v["ns"] else None, "csatPct": round(v["puas"] / v["n"] * 100, 1)}
+                  for v in per_outlet.values()), key=lambda r: -r["n"])
+    return {"items": items, "perOutlet": per, "distribution": dist, "distributionService": dist_s,
+            "groups": groups, "groupsService": groups_s, "tags": tags, "scale": RATING_SCALE, "groupLabels": RATING_GROUPS}
 
 
 # ---------- Pengaturan & admin users ----------
@@ -622,9 +637,10 @@ async def export(kind: str, from_: str | None = Query(default=None, alias="from"
                 async for s in db.stamps.find({"day": {"$gte": from_, "$lte": to}})]
         resp = _csv(rows, ["id", "at", "day", "hour", "memberId", "outlet", "area", "granted", "reason", "flags", "distanceM", "promoCode", "isNewMember"])
     elif kind == "feedback":
-        rows = [{"at": f["at"], "memberId": f["memberId"], "outlet": f.get("outletCode"), "area": f.get("area"), "rating": f["rating"], "tag": f.get("tag"), "comment": f.get("comment")}
+        rows = [{"at": f["at"], "memberId": f["memberId"], "outlet": f.get("outletCode"), "area": f.get("area"), "rating": f["rating"],
+                 "ratingGroup": rating_group(f["rating"]), "service": f.get("service"), "tags": ",".join(f.get("tags") or []), "comment": f.get("comment")}
                 async for f in db.feedback.find({"at": {"$gte": from_, "$lte": to + "T23:59:59Z"}})]
-        resp = _csv(rows, ["at", "memberId", "outlet", "area", "rating", "tag", "comment"])
+        resp = _csv(rows, ["at", "memberId", "outlet", "area", "rating", "ratingGroup", "service", "tags", "comment"])
     elif kind == "vouchers":
         rows = [{"id": v["_id"], "memberId": v["memberId"], "type": v["type"], "title": v["title"], "valueRp": v.get("valueRp"), "validFrom": v["validFrom"],
                  "validTo": v["validTo"], "status": v["status"], "usedAt": v.get("usedAt"), "usedOutlet": v.get("usedOutletName"), "campaignCode": v.get("campaignCode")}

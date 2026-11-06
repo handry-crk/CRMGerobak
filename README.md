@@ -38,7 +38,7 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 
 ## Alur customer
 1. `/s/{qrToken}` — perangkat dikenal → `POST /api/stamp` langsung; belum dikenal → form nomor WA.
-2. Hasil: dots progres, headline, rating 1-tap (+tag, komentar bila ≤ 2★), chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
+2. Hasil: dots progres, headline, **rating wajib** dua baris emoji — rasa cimol & pelayanan crew (😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget; kelompok Tidak puas/Biasa/Puas) + tag, komentar bila ≤ Kurang; voucher baru bisa ditukar setelah rating lengkap (`feedbackRequired`). Lalu chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
 3. Stamp ke-5 → voucher `stamp_reward` (30 hari). Member baru → voucher **Balik Lagi** aktif H+3 selama 7 hari.
 4. **Tukar sekarang** hanya jika sudah scan gerobak dalam 60 menit terakhir → layar hijau + kode 4 huruf + hitung mundur.
 5. `/saya` — progres, voucher, riwayat, opt-out WA, pindah HP (ketik nomor; OTP = Iterasi 1).
@@ -54,6 +54,7 @@ Ringkasan (member baru, aktif 30D, stamp, scan rate, repeat 30D, redemption, Bal
 - Lapis 2 (deteksi pola: 1 HP banyak nomor, 1 IP banyak nomor, stamp di luar jam buka, member "setia 1 gerobak") dan stamp terikat transaksi QRIS/POS: roadmap.
 
 ![Anti-fraud](docs/admin-antifraud.jpg)
+![Rating](docs/admin-rating.jpg)
 
 ## API ringkas
 Publik: `GET /api/outlet/{token}` · `POST /api/stamp` · `POST /api/feedback` · `POST /api/profile` · `POST /api/voucher/{id}/redeem` · `GET /api/me` · `POST /api/me/opt-out` · `POST /api/me/switch-device` (header `X-Device-Token`).
@@ -64,7 +65,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 21 skenario acceptance (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 22 skenario acceptance (mongomock, tanpa server Mongo)
 ```
 
 ## Roadmap (Iterasi di build spec)

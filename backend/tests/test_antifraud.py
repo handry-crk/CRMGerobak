@@ -36,7 +36,7 @@ async def test_reward_redeem_h_plus_1(client, outlets):
 
 async def test_redeem_quota_per_outlet(client, admin, outlets):
     db = dbmod.get_db()
-    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "maxRedemptionsPerOutletPerDay": 1}})
+    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "maxRedemptionsPerOutletPerDay": 1, "feedbackRequired": False}})
     r1, d1 = await make_reward(client, outlets, "081234567890")
     r2, d2 = await make_reward(client, outlets, "081234567891")
     v1 = next(v for v in r1["vouchers"] if v["type"] == "stamp_reward")
@@ -85,7 +85,7 @@ async def test_adding_staff_marks_existing_member(client, admin, outlets):
 
 async def test_reconciliation_rows(client, admin, outlets):
     db = dbmod.get_db()
-    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0}})
+    await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "feedbackRequired": False}})
     r, d = await make_reward(client, outlets, "081234567890")
     v = next(x for x in r["vouchers"] if x["type"] == "stamp_reward")
     assert (await client.post(f"/api/voucher/{v['id']}/redeem", json={"qrToken": outlets[1]["qrToken"]}, headers={"X-Device-Token": d})).status_code == 200
