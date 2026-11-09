@@ -274,3 +274,21 @@ async def test_feedback_required_before_redeem(client, outlets):
     fb = await db.feedback.find_one({"stampId": r["stampId"]})
     assert fb["ratingGroup"] == "puas" and fb["serviceGroup"] == "tidak_puas" and fb["tags"] == ["Antre lama"]
     assert fb["serviceNote"] == "crew main hp" and fb["productNote"] is None and fb["comment"] == "Pelayanan: crew main hp"
+
+
+async def test_concurrent_double_scan_grants_once(client, outlets):
+    import asyncio
+    tok = outlets[0]["qrToken"]
+    first = await stamp(client, tok, phone="081234567890", name="Dina")
+    dev, mid = first["deviceToken"], first["member"]["id"]
+    db = dbmod.get_db()
+    # Hapus jejak hari ini agar aturan "already_today" tidak lebih dulu menolak; sisakan hanya kunci atomik
+    await db.stamps.delete_many({"memberId": mid})
+    await db.stamp_locks.delete_many({})
+    await db.members.update_one({"_id": mid}, {"$set": {"stampsActive": 0, "stampsTotal": 0, "visits": 0}})
+    body = lambda: {"qrToken": tok, "requestId": rid(), "deviceToken": dev}
+    results = await asyncio.gather(*[client.post("/api/stamp", json=body()) for _ in range(5)])
+    granted = [r.json()["granted"] for r in results]
+    assert granted.count(True) == 1, granted
+    m = await db.members.find_one({"_id": mid})
+    assert m["stampsActive"] == 1

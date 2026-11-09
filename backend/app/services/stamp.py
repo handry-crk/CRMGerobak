@@ -201,6 +201,13 @@ async def process_stamp(
 
     token, device_new = await attach_device(db, member, device_token)
     granted, reason, message = await evaluate_rules(db, member, outlet, settings)
+    if granted:
+        # Kunci atomik per member-outlet-hari: request kembar yang datang bersamaan hanya satu yang lolos
+        try:
+            await db.stamp_locks.insert_one({"_id": f"{member['_id']}:{outlet['_id']}:{today_wib()}", "at": iso(now_utc())})
+        except Exception:  # DuplicateKeyError
+            if int(settings["maxStampsPerOutletPerDay"]) <= 1:
+                granted, reason, message = False, "already_today", "Stamp hari ini di gerobak ini udah masuk, Kak. Besok mampir lagi ya 😄"
 
     flags: list[str] = []
     distance = None

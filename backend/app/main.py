@@ -26,6 +26,10 @@ STATIC_DIR = os.environ.get("STATIC_DIR", os.path.join(os.path.dirname(__file__)
 async def lifespan(app: FastAPI):
     db = await connect_or_fallback()
     await bootstrap(db)
+    if config.default_admin_pin == "1234":
+        log.warning("DEFAULT_ADMIN_PIN masih 1234 — ganti sebelum pilot (PIN admin pertama dibuat dari nilai ini).")
+    if config.metrics_api_key.startswith("ganti-"):
+        log.warning("METRICS_API_KEY masih nilai bawaan — ganti sebelum integrasi dashboard lain.")
     scheduler = None
     if config.enable_scheduler:
         scheduler = build_scheduler()

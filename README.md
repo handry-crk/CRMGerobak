@@ -27,6 +27,16 @@ USE_MOCK_DB=true PUBLIC_BASE_URL=http://localhost:8000 uvicorn app.main:app --po
 ```
 Buka `http://localhost:8000/admin` → login **Admin / 1234** → Pengaturan → **Isi outlet contoh** → tab Outlet & QR → buka *Stiker A6* atau klik baris outlet untuk melihat URL `/s/{token}` dan coba di HP.
 
+## Checklist go-live pilot (Railway)
+1. **Database permanen**: di project Railway klik **+ New → Database → MongoDB**. Buka service MongoDB → tab Variables → salin `MONGO_URL` (atau `MONGO_PUBLIC_URL`). Di service app: set `MONGO_URL` = nilai itu, ubah `USE_MOCK_DB` = `false`. Cek log: harus ada "MongoDB terhubung".
+2. **Rahasia**: `DEFAULT_ADMIN_PIN` (4–6 angka, dipakai saat admin pertama dibuat — kalau admin sudah ada, ganti PIN lewat Pengaturan → Admin), `METRICS_API_KEY` (acak panjang), `SECRET_KEY`.
+3. `PUBLIC_BASE_URL` = `https://…up.railway.app` (atau domain sendiri; QR stiker dicetak dari nilai ini — jangan diganti setelah stiker dicetak).
+4. Pengaturan di dashboard: kembalikan **Jeda minimal = 20**, **Maks. stamp/hari = 2** bila sempat diubah untuk uji; isi **Email digest** dan SMTP bila ingin email harian.
+5. Buat admin per role (CRM Lead, Manager, Area Bandung, Viewer) dan **nonaktifkan/ganti PIN akun Admin bawaan**.
+6. Impor outlet pilot (CSV dengan koordinat) → unduh stiker A6 + tent card → cetak → tempel di sisi gerobak dekat QRIS (bukan di meja goreng).
+7. Masukkan nomor crew & keluarga (tab Anti-fraud). Briefing crew satu kalimat + cara mengenali layar hijau (ada di tent card).
+8. Backup: jalankan **Backup sekarang** mingguan dan unduh — disk Railway tidak permanen; atau aktifkan backup otomatis di MongoDB Atlas.
+
 ## Jalankan produksi
 ```bash
 cp .env.example .env   # isi PUBLIC_BASE_URL, SECRET_KEY, DEFAULT_ADMIN_PIN, METRICS_API_KEY, SMTP (opsional)
@@ -65,7 +75,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 22 skenario acceptance (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 23 skenario acceptance (mongomock, tanpa server Mongo)
 ```
 
 ## Roadmap (Iterasi di build spec)

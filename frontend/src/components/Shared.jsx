@@ -57,7 +57,7 @@ export function VoucherCard({ v, canRedeem, onRedeem, hint }) {
           {!canRedeem && <div className="text-xs text-center mt-2 text-charcoal/70">{hint || 'Scan QR gerobak dulu ya, Kak.'}</div>}
         </div>
       )}
-      {scheduled && <div className="text-xs mt-2 text-deep font-bold">Kita ingetin pas udah bisa dipakai.</div>}
+      {scheduled && <div className="text-xs mt-2 text-deep font-bold">Mulai {fmtTanggal(v.validFrom, { year: undefined })} tinggal scan QR gerobak, vouchernya langsung bisa dipakai.</div>}
       {v.status === 'used' && <div className="text-xs mt-2 text-charcoal/60">Sudah ditukar {v.usedOutletName ? `di ${v.usedOutletName}` : ''} · {fmtTanggal(v.usedAt)}</div>}
     </div>
   )
