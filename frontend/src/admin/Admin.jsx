@@ -50,13 +50,14 @@ const NAV = [
 
 export default function Admin() {
   const [user, setUser] = useState(getAdmin()?.user || null)
-  const [meta, setMeta] = useState({ areas: [], roles: [] })
+  const FALLBACK_META = { areas: ['Jakarta', 'Bandung', 'Bekasi', 'Depok', 'Bogor', 'Tangsel', 'Tangerang'], roles: ['CRM Lead', 'Manager', 'Area', 'Viewer'] }
+  const [meta, setMeta] = useState(FALLBACK_META)
   const [toast, setToast] = useState('')
 
   useEffect(() => {
     if (!user) return
     adminApi('/api/admin/me').then(setUser).catch(() => { setAdmin(null); setUser(null) })
-    adminApi('/api/admin/meta').then(setMeta).catch(() => {})
+    adminApi('/api/admin/meta').then((m) => setMeta({ ...FALLBACK_META, ...m })).catch(() => {})
   }, [user?.id])
 
   function notify(msg) { setToast(msg); setTimeout(() => setToast(''), 2500) }

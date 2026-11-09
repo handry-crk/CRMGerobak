@@ -120,10 +120,11 @@ export default function Settings({ ctx }) {
             <div className="font-extrabold">{u.id ? 'Edit admin' : 'Admin baru'}</div>
             <Field label="Nama"><input className="input" required value={u.name} onChange={(e) => setU({ ...u, name: e.target.value })} /></Field>
             <Field label="Role"><select className="input" value={u.role} onChange={(e) => setU({ ...u, role: e.target.value })}>{ctx.meta.roles.map((r) => <option key={r}>{r}</option>)}</select></Field>
+            {u.role === 'Area' && u.areas.length === 0 && <div className="text-xs text-brand font-bold">Role Area wajib memilih minimal satu area.</div>}
             {u.role === 'Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{ctx.meta.areas.map((a) => <button type="button" key={a} className={`chip ${u.areas.includes(a) ? 'chip-on' : ''}`} onClick={() => setU({ ...u, areas: u.areas.includes(a) ? u.areas.filter((x) => x !== a) : [...u.areas, a] })}>{a}</button>)}</div></Field>}
             <Field label="Email (untuk digest)"><input className="input" value={u.email || ''} onChange={(e) => setU({ ...u, email: e.target.value })} /></Field>
             <Field label={u.id ? 'PIN baru (kosongkan bila tidak diganti)' : 'PIN (4–6 angka)'}><input className="input" inputMode="numeric" maxLength={6} value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value })} /></Field>
-            <div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost" onClick={() => setU(null)}>Batal</button><button className="btn-primary">Simpan</button></div>
+            <div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost" onClick={() => setU(null)}>Batal</button><button className="btn-primary" disabled={u.role === 'Area' && u.areas.length === 0}>Simpan</button></div>
           </form>
         </div>
       )}
