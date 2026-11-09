@@ -24,8 +24,7 @@ export default function Scan() {
   const [busy, setBusy] = useState(false)
   const [formErr, setFormErr] = useState('')
   const meta = useFeedbackMeta()
-  const [serviceDone, setServiceDone] = useState(false)
-  const [tasteDone, setTasteDone] = useState(false)
+  const [reviewDone, setReviewDone] = useState({ taste: false, service: false })
   const [promoOn, setPromoOn] = useState(false)
   const [profile, setProfile] = useState({ name: '', source: '' })
   const [profileDone, setProfileDone] = useState(false)
@@ -135,11 +134,13 @@ export default function Scan() {
   }
 
   const { res } = state
-  const needTaste = !!res.pendingTaste && !tasteDone
-  const gate = (!!res.feedbackRequired && !serviceDone) || needTaste // pelayanan hari ini + rasa kunjungan lalu
+  const pr = res.pendingReview
+  const reviewPending = !!pr && ((pr.needTaste && !reviewDone.taste) || (pr.needService && !reviewDone.service))
+  const gate = !!res.feedbackRequired && reviewPending // yang wajib: penilaian kunjungan SEBELUMNYA (sudah dilayani & dimakan)
   const canRedeem = !gate // sesi outlet aktif karena baru saja scan di sini
-  const activeVouchers = res.vouchers.filter((v) => v.status === 'active')
-  const otherVouchers = res.vouchers.filter((v) => v.status !== 'active')
+  const welcomeId = res.isNewMember ? res.welcomeVoucher?.id : null
+  const activeVouchers = res.vouchers.filter((v) => v.status === 'active' && v.id !== welcomeId)
+  const otherVouchers = res.vouchers.filter((v) => v.status !== 'active' && v.id !== welcomeId)
 
   return (
     <main className="max-w-[420px] mx-auto min-h-screen pb-10 relative overflow-hidden">
@@ -150,24 +151,31 @@ export default function Scan() {
         <Dots active={res.rewardIssued ? res.stampsPerReward : res.stampsActive} total={res.stampsPerReward} pop={res.granted} />
         <h1 className="mt-4 text-2xl font-extrabold leading-tight">{res.headline}</h1>
         {res.isNewMember && res.welcomeVoucher && (
-          <div className="mt-4 text-left"><VoucherCard v={res.welcomeVoucher} canRedeem={false} /></div>
+          <div className="mt-4 text-left"><VoucherCard v={res.welcomeVoucher} canRedeem={canRedeem} onRedeem={setRedeem} hint="Jawab pertanyaan di bawah dulu ya, Kak." /></div>
         )}
       </section>
 
-      {(res.askFeedback || res.pendingTaste) && outlet.feedbackPrompt && (
+      {pr && outlet.feedbackPrompt && (
         <section className="px-4 mt-6">
           <div className={`card space-y-5 ${gate ? 'border-brand' : ''}`}>
-            {gate && <div className="text-xs font-bold text-deep">Jawab yang di bawah ini dulu ya, Kak (5 detik) — voucher langsung bisa dipakai setelahnya.</div>}
-            {res.pendingTaste && (
-              <FeedbackBlock kind="taste" stampId={res.pendingTaste.stampId} meta={meta} onDone={() => setTasteDone(true)}
-                title={`Cimol dari ${res.pendingTaste.outletName} ${res.pendingTaste.whenText}, rasanya gimana?`} />
+            <div className="text-xs font-bold text-deep">{gate ? 'Jawab dulu soal kunjungan sebelumnya ya, Kak (5 detik) — voucher langsung bisa dipakai setelahnya.' : 'Soal kunjungan sebelumnya:'}</div>
+            {pr.needTaste && (
+              <FeedbackBlock kind="taste" stampId={pr.stampId} meta={meta} onDone={() => setReviewDone((d) => ({ ...d, taste: true }))}
+                title={`Cimol dari ${pr.outletName} ${pr.whenText}, rasanya gimana?`} />
             )}
-            {res.askFeedback && (
-              <FeedbackBlock kind="service" stampId={res.stampId} meta={meta} onDone={() => setServiceDone(true)} title="Pelayanan crew hari ini gimana?" />
+            {pr.needService && (
+              <FeedbackBlock kind="service" stampId={pr.stampId} meta={meta} onDone={() => setReviewDone((d) => ({ ...d, service: true }))}
+                title={`Pelayanan crew di ${pr.outletName} ${pr.whenText} gimana?`} />
             )}
-            {!res.pendingTaste && res.askFeedback && (
-              <div className="text-xs text-charcoal/60">Rasa cimolnya kita tanya setelah dimakan ya — pas scan berikutnya atau di halaman “Stamp & voucher saya”.</div>
-            )}
+          </div>
+        </section>
+      )}
+
+      {res.askFeedback && outlet.feedbackPrompt && (
+        <section className="px-4 mt-4">
+          <div className="card">
+            <FeedbackBlock kind="service" stampId={res.stampId} meta={meta} title="Udah dilayani? Pelayanan crew hari ini gimana?" />
+            <div className="mt-2 text-xs text-charcoal/60">Boleh diisi nanti. Rasa cimolnya kita tanya setelah dimakan — pas scan berikutnya atau di halaman “Stamp & voucher saya”.</div>
           </div>
         </section>
       )}
@@ -205,9 +213,9 @@ export default function Scan() {
           {activeVouchers.map((v) => <VoucherCard key={v.id} v={v} canRedeem={canRedeem} onRedeem={setRedeem} hint="Jawab pertanyaan di atas dulu ya, Kak." />)}
         </section>
       )}
-      {otherVouchers.filter((v) => v.status === 'scheduled' && !(res.isNewMember && res.welcomeVoucher?.id === v.id)).length > 0 && (
+      {otherVouchers.filter((v) => v.status === 'scheduled').length > 0 && (
         <section className="px-4 mt-4 space-y-3">
-          {otherVouchers.filter((v) => v.status === 'scheduled' && !(res.isNewMember && res.welcomeVoucher?.id === v.id)).map((v) => <VoucherCard key={v.id} v={v} canRedeem={false} />)}
+          {otherVouchers.filter((v) => v.status === 'scheduled').map((v) => <VoucherCard key={v.id} v={v} canRedeem={false} />)}
         </section>
       )}
 

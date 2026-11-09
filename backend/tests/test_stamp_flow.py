@@ -258,32 +258,34 @@ async def test_feedback_two_stage_service_now_taste_next_visit(client, outlets):
     # Kunjungan 1: hanya pelayanan yang dinilai
     v1 = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     h = {"X-Device-Token": v1["deviceToken"]}
-    assert v1["feedbackRequired"] is True and v1["pendingTaste"] is None
+    assert v1["feedbackRequired"] is True and v1["pendingReview"] is None
+    # Pelayanan hari ini boleh diisi sekarang (opsional), rasa belum
     await client.post("/api/feedback", json={"stampId": v1["stampId"], "service": 5, "tags": ["Crew ramah"]}, headers=h)
-    # Kunjungan 2: rasa kunjungan 1 ditanya
+    # Kunjungan 2: kunjungan 1 masih butuh rasa
     await db.members.update_one({"_id": v1["member"]["id"]}, {"$set": {"stampsActive": 4}})
     v2 = await stamp(client, outlets[1]["qrToken"], deviceToken=v1["deviceToken"])
-    assert v2["pendingTaste"]["stampId"] == v1["stampId"] and v2["pendingTaste"]["outletName"] == outlets[0]["name"]
+    pr = v2["pendingReview"]
+    assert pr["stampId"] == v1["stampId"] and pr["needTaste"] is True and pr["needService"] is False
     reward = next(v for v in v2["vouchers"] if v["type"] == "stamp_reward")
     body = {"qrToken": outlets[1]["qrToken"]}
-    # Belum isi pelayanan hari ini → ditolak
+    # Kunjungan 1 belum dinilai lengkap → voucher belum bisa ditukar (pelayanan HARI INI tidak disyaratkan: belum bayar/dilayani)
     r = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "need_feedback"
-    await client.post("/api/feedback", json={"stampId": v2["stampId"], "service": 2, "tags": ["Antre lama"], "serviceNote": "crew main hp"}, headers=h)
-    # Pelayanan sudah, rasa kunjungan 1 belum → ditolak
-    r = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "need_taste"
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "need_review"
     r = await client.post("/api/feedback", json={"stampId": v1["stampId"], "rating": 4, "tags": ["Enak banget", "Kurang panas", "Crew ramah"]}, headers=h)
     assert r.json()["tasteDone"] is True
     ok = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
-    assert ok.status_code == 200
+    assert ok.status_code == 200 and ok.json()["crewInstruction"].startswith("Berikan")
     fb1 = await db.feedback.find_one({"stampId": v1["stampId"]})
     assert fb1["rating"] == 4 and fb1["service"] == 5 and fb1["ratingGroup"] == "puas" and fb1["tags"] == ["Enak banget", "Crew ramah"]
-    fb2 = await db.feedback.find_one({"stampId": v2["stampId"]})
-    assert fb2["service"] == 2 and fb2["rating"] is None and fb2["comment"] == "Pelayanan: crew main hp"
-    # /saya menunjukkan rasa kunjungan 2 masih tertunda
+    # Kunjungan 3: kunjungan 2 belum dinilai sama sekali → dua-duanya ditanya
+    v3 = await stamp(client, outlets[2]["qrToken"], deviceToken=v1["deviceToken"])
+    assert v3["pendingReview"]["stampId"] == v2["stampId"] and v3["pendingReview"]["needTaste"] and v3["pendingReview"]["needService"]
+    assert v3["granted"] is False  # batas 2 stamp/hari → kunjungan 3 tidak dihitung, jadi yang tertunda tetap kunjungan 2
     me = (await client.get("/api/me", headers=h)).json()
-    assert me["pendingTaste"]["stampId"] == v2["stampId"]
+    assert me["pendingReview"]["stampId"] == v2["stampId"]
+    # Voucher potongan: instruksi crew memuat nilai & min belanja
+    wv = next(v for v in me["vouchers"] if v["type"] == "balik_lagi")
+    assert wv["isDiscount"] and "3.000" in wv["crewInstruction"] and "15.000" in wv["crewInstruction"]
 
 
 async def test_concurrent_double_scan_grants_once(client, outlets):

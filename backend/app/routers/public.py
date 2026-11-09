@@ -167,7 +167,7 @@ async def get_me(member: dict = Depends(current_member), db: AsyncIOMotorDatabas
         "vouchers": vouchers,
         "history": history,
         "sources": list(SOURCES),
-        "pendingTaste": await stamp_svc.pending_taste(db, member["_id"]),
+        "pendingReview": await stamp_svc.pending_review(db, member["_id"]),
     }
 
 

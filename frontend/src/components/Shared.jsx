@@ -53,6 +53,7 @@ export function VoucherCard({ v, canRedeem, onRedeem, hint }) {
       </div>
       {v.status === 'active' && (
         <div className="mt-3">
+          {v.isDiscount && <div className="text-xs text-deep font-bold mb-2">Tunjukkan ke crew <u>sebelum bayar</u> ya, Kak.</div>}
           <button className="btn-primary w-full" disabled={!canRedeem} onClick={() => onRedeem(v)}>Tukar sekarang di gerobak</button>
           {!canRedeem && <div className="text-xs text-center mt-2 text-charcoal/70">{hint || 'Scan QR gerobak dulu ya, Kak.'}</div>}
         </div>
@@ -101,7 +102,7 @@ export function RedeemFlow({ voucher, qrToken, outletName, countdownSec = 180, o
       <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={onClose}>
         <div className="bg-white w-full rounded-t-3xl p-5 pb-8" onClick={(e) => e.stopPropagation()}>
           <div className="font-extrabold text-lg">{voucher.title}</div>
-          <p className="mt-2 text-sm">Tunjukkan layar ini ke crew, lalu tekan <b>Tukar</b>. Voucher hangus setelah ditekan, ya.</p>
+          <p className="mt-2 text-sm">{voucher.isDiscount ? 'Pakai sebelum bayar: ' : ''}Tunjukkan layar ini ke crew, lalu tekan <b>Tukar</b>. Voucher hangus setelah ditekan, ya.</p>
           {step === 'error' && <div className="mt-3 text-sm text-brand font-bold">{err}</div>}
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button className="btn-ghost" onClick={onClose}>Nanti dulu</button>
@@ -119,7 +120,8 @@ export function RedeemFlow({ voucher, qrToken, outletName, countdownSec = 180, o
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <div className="text-sm font-bold uppercase tracking-widest opacity-90">{green ? 'Voucher ditukar' : 'Sudah ditukar'}</div>
         <div className="mt-3 text-4xl font-extrabold leading-tight">{voucher.title}</div>
-        <div className="mt-6 text-lg font-bold">{outletName || data?.usedOutletName}</div>
+        {voucher.crewInstruction && <div className="mt-3 inline-block bg-white/20 rounded-xl px-4 py-2 text-base font-bold">Crew: {voucher.crewInstruction}</div>}
+        <div className="mt-5 text-lg font-bold">{outletName || data?.usedOutletName}</div>
         {green ? (
           <>
             <div className="mt-1 text-5xl font-extrabold tabular-nums">{clock}</div>

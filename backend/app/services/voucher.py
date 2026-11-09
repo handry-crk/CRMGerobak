@@ -28,6 +28,12 @@ def voucher_public(v: dict, settings: dict | None = None) -> dict:
         "description": (
             f"Minimal belanja {format_rp(v['minSpendRp'])}" if v.get("minSpendRp") else ""
         ),
+        # Untuk layar hijau: apa yang harus dilakukan crew
+        "isDiscount": v["type"] in ("balik_lagi", "campaign") and int(v.get("valueRp", 0)) > 0 and int(v.get("minSpendRp", 0)) > 0,
+        "crewInstruction": (
+            f"Kurangi total belanja Rp{format_rp(v.get('valueRp', 0))} (min. belanja Rp{format_rp(v['minSpendRp'])})"
+            if v.get("minSpendRp") else f"Berikan {v['title']}"
+        ),
     }
 
 
@@ -154,13 +160,12 @@ async def redeem_voucher(
     if not recent:
         raise RedeemError("Scan QR gerobak dulu ya, Kak.", "no_outlet")
 
-    if settings.get("feedbackRequired", True) and recent.get("granted") and not member.get("isStaff"):
-        fb = await db.feedback.find_one({"stampId": recent["_id"], "complete": True})
-        if not fb:
-            raise RedeemError("Isi rating pelayanan dulu ya, Kak, baru voucher bisa ditukar.", "need_feedback")
-        from .stamp import pending_taste
-        if await pending_taste(db, member["_id"], exclude_stamp_id=recent["_id"]):
-            raise RedeemError("Kasih nilai rasa cimol kunjungan sebelumnya dulu ya, Kak.", "need_taste")
+    if settings.get("feedbackRequired", True) and not member.get("isStaff"):
+        # Yang wajib: penilaian kunjungan SEBELUMNYA (rasa & pelayanan) — kunjungan hari ini belum bisa dinilai
+        # karena voucher potongan dipakai sebelum bayar/dilayani.
+        from .stamp import pending_review
+        if await pending_review(db, member["_id"], exclude_stamp_id=recent["_id"]):
+            raise RedeemError("Kasih nilai kunjungan sebelumnya dulu ya, Kak (rasa & pelayanan), baru voucher bisa ditukar.", "need_review")
 
     # Lapis 1: kuota penukaran per gerobak per hari
     quota = int(settings.get("maxRedemptionsPerOutletPerDay", 0) or 0)

@@ -102,14 +102,17 @@ def tentcard_pdf(outlet: dict, url: str, settings: dict) -> bytes:
         "Satu kalimat saat customer menunggu:",
         f"“{CREW_LINE}”",
         "",
-        "Penukaran voucher:",
-        "• Customer menunjukkan LAYAR HIJAU penuh",
+        "Penukaran voucher = LAYAR HIJAU penuh:",
         "• Ada nama gerobak ini, jam berjalan,",
-        "  kode 4 huruf, dan garis hitung mundur 3 menit",
-        "• Serahkan hadiah sesuai judul di layar",
+        "  kode 4 huruf, hitung mundur 3 menit",
+        "• Baca baris instruksi di layar:",
+        "  - 'Kurangi total belanja Rp3.000' → potong",
+        "    harga saat bayar (min. belanja Rp15.000)",
+        "  - 'Berikan Cimol Bojot kecil gratis' → serahkan",
         "• Tidak perlu mencatat apa pun",
         "",
-        "Layar abu-abu 'Sudah ditukar' = voucher sudah dipakai.",
+        "Voucher potongan ditunjukkan SEBELUM bayar.",
+        "Layar abu-abu 'Sudah ditukar' = sudah dipakai.",
     ]
     y = h - 30 * mm
     for ln in lines:

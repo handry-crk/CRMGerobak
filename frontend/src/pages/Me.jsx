@@ -62,11 +62,17 @@ export default function Me() {
         <div className="text-xs text-charcoal/60 mt-1">{member.visits} kunjungan · gabung {fmtTanggal(member.joinedAt)}</div>
       </section>
 
-      {data.pendingTaste && (
+      {data.pendingReview && (
         <section className="px-4 mt-6">
-          <div className="card border-brand">
-            <FeedbackBlock kind="taste" stampId={data.pendingTaste.stampId} meta={meta} onDone={() => setTimeout(load, 1500)}
-              title={`Cimol dari ${data.pendingTaste.outletName} ${data.pendingTaste.whenText}, rasanya gimana?`} />
+          <div className="card border-brand space-y-5">
+            {data.pendingReview.needTaste && (
+              <FeedbackBlock kind="taste" stampId={data.pendingReview.stampId} meta={meta} onDone={() => setTimeout(load, 1500)}
+                title={`Cimol dari ${data.pendingReview.outletName} ${data.pendingReview.whenText}, rasanya gimana?`} />
+            )}
+            {data.pendingReview.needService && (
+              <FeedbackBlock kind="service" stampId={data.pendingReview.stampId} meta={meta} onDone={() => setTimeout(load, 1500)}
+                title={`Pelayanan crew di ${data.pendingReview.outletName} ${data.pendingReview.whenText} gimana?`} />
+            )}
           </div>
         </section>
       )}

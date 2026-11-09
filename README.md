@@ -49,9 +49,9 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 
 ## Alur customer
 1. `/s/{qrToken}` — perangkat dikenal → `POST /api/stamp` langsung; belum dikenal → form nomor WA.
-2. Hasil: dots progres, headline, **rating wajib dua tahap** (emoji 😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget; kelompok Tidak puas/Biasa/Puas; tag mengikuti emoji; tulis sendiri bila ≤ Kurang): **pelayanan crew** dinilai saat scan (baru beli), **rasa cimol** dinilai setelah dimakan — ditanya di kunjungan berikutnya ("Cimol dari Gerobak Braga kemarin, rasanya gimana?") atau di `/saya`. Voucher baru bisa ditukar setelah pelayanan hari ini + rasa kunjungan lalu terisi (`feedbackRequired`). Lalu chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
+2. Hasil: dots progres, headline, lalu **penilaian kunjungan sebelumnya** (wajib bila ada, ≤14 hari): rasa cimol & pelayanan crew yang belum dinilai — ditanya setelah dilayani & dimakan, bukan saat antre (emoji 😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget; kelompok Tidak puas/Biasa/Puas; tag mengikuti emoji; tulis sendiri bila ≤ Kurang). Pelayanan hari ini ditawarkan opsional ("Udah dilayani?"). Voucher bisa ditukar setelah kunjungan sebelumnya dinilai (`feedbackRequired`); kunjungan hari ini tidak disyaratkan karena voucher potongan dipakai sebelum bayar. Lalu chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
 3. Stamp ke-5 → voucher `stamp_reward` (30 hari). Member baru → voucher **Balik Lagi** aktif H+3 selama 7 hari.
-4. **Tukar sekarang** hanya jika sudah scan gerobak dalam 60 menit terakhir → layar hijau + kode 4 huruf + hitung mundur.
+4. **Tukar sekarang** hanya jika sudah scan gerobak dalam 60 menit terakhir → layar hijau + **instruksi crew** ("Kurangi total belanja Rp3.000 (min. belanja Rp15.000)" / "Berikan Cimol Bojot kecil gratis") + kode 4 huruf + hitung mundur. Voucher potongan diberi petunjuk "tunjukkan sebelum bayar".
 5. `/saya` — progres, voucher, riwayat, opt-out WA, pindah HP (ketik nomor; OTP = Iterasi 1).
 
 ## Admin (`/admin`, login nama + PIN; 5× salah → kunci 15 menit)
