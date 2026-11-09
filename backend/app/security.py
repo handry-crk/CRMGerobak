@@ -113,7 +113,7 @@ def area_filter(user: dict) -> dict:
 
 
 def can_see_full_phone(user: dict) -> bool:
-    return user["role"] in ("CRM Lead", "Manager")
+    return user["role"] in ("Manager", "CRM Lead")
 
 
 def new_pin_hash(pin: str) -> str:

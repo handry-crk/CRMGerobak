@@ -93,12 +93,13 @@ export default function Settings({ ctx }) {
       <div className="card space-y-3">
         <div className="font-extrabold">Admin</div>
         <Table cols={[{ key: 'name', label: 'Nama' }, { key: 'role', label: 'Role' }, { key: 'areas', label: 'Area', render: (x) => x.areas?.join(', ') || '–' }, { key: 'email', label: 'Email' }, { key: 'active', label: 'Status', render: (x) => (x.active ? 'Aktif' : 'Nonaktif') },
-          { key: 'act', label: '', render: (x) => ctx.lead && <span className="flex gap-2"><button className="underline text-deep" onClick={() => setU({ ...x, pin: '' })}>Edit / reset PIN</button>
+          { key: 'act', label: '', render: (x) => ctx.manager && <span className="flex gap-2"><button className="underline text-deep" onClick={() => setU({ ...x, pin: '' })}>Edit / reset PIN</button>
             {x.id !== ctx.user.id && <button className="underline text-brand" onClick={async () => { await adminApi(`/api/admin/users/${x.id}/toggle-active`, { method: 'POST' }); load() }}>{x.active ? 'Nonaktifkan' : 'Aktifkan'}</button>}</span> }]} rows={users} />
-        {ctx.lead && <button className="btn-ghost" onClick={() => setU({ name: '', role: 'Viewer', areas: [], pin: '', email: '' })}>+ Admin</button>}
+        {ctx.manager && <button className="btn-ghost" onClick={() => setU({ name: '', role: 'Viewer', areas: [], pin: '', email: '' })}>+ Admin</button>}
+        {!ctx.manager && <p className="text-xs text-charcoal/60">Hanya Manager yang bisa menambah/mengubah akun admin.</p>}
       </div>
 
-      {ctx.lead && (
+      {ctx.manager && (
         <div className="card space-y-3">
           <div className="font-extrabold">Job & data</div>
           <div className="flex flex-wrap gap-2">

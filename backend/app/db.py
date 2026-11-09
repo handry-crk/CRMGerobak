@@ -42,7 +42,7 @@ DEFAULT_SETTINGS: dict = {
     "flagDeviceThreshold": 3,
 }
 
-ADMIN_ROLES = ("CRM Lead", "Manager", "Area", "Viewer")
+ADMIN_ROLES = ("Manager", "CRM Lead", "Area", "Viewer")  # Manager = akses penuh; CRM Lead = operasional
 AREAS = ("Jakarta", "Bandung", "Bekasi", "Depok", "Bogor", "Tangsel", "Tangerang")
 SOURCES = ("Lewat gerobak", "Instagram", "TikTok", "Teman", "GoFood/GrabFood", "Lainnya")
 # Skala kepuasan 1–5 dengan emoji & label; dikelompokkan: 1–2 Tidak puas, 3 Biasa, 4–5 Puas
@@ -154,18 +154,20 @@ async def bootstrap(db: AsyncIOMotorDatabase) -> None:
         import logging
         res = await db.admin_users.update_one(
             {"_id": "adm_default"},
-            {"$set": {"pinHash": hash_pin(config.default_admin_pin), "role": "CRM Lead", "active": True,
+            {"$set": {"pinHash": hash_pin(config.default_admin_pin), "role": "Manager", "active": True,
                       "failedAttempts": 0, "lockedUntil": None}},
         )
         logging.getLogger("db").warning(
             "RESET_ADMIN_PIN=true: PIN akun 'Admin' di-set ulang ke DEFAULT_ADMIN_PIN (%s). "
             "Segera hapus variabel RESET_ADMIN_PIN setelah berhasil login.", "ditemukan" if res.matched_count else "akun belum ada, dibuat baru")
+    # Akun bawaan selalu Manager (migrasi dari versi awal yang memakai CRM Lead)
+    await db.admin_users.update_one({"_id": "adm_default", "role": {"$ne": "Manager"}}, {"$set": {"role": "Manager"}})
     if await db.admin_users.count_documents({}) == 0:
         await db.admin_users.insert_one(
             {
                 "_id": "adm_default",
                 "name": config.default_admin_name,
-                "role": "CRM Lead",
+                "role": "Manager",
                 "areas": [],
                 "pinHash": hash_pin(config.default_admin_pin),
                 "active": True,

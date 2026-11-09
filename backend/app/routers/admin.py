@@ -22,9 +22,10 @@ from ..services.voucher import create_campaign_vouchers, create_reward_voucher, 
 from ..utils import add_days, iso, mask_phone, new_id, new_qr_token, normalize_phone, now_utc, today_wib
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-PRIV = require_roles("CRM Lead", "Manager")
-LEAD = require_roles("CRM Lead")
-WRITE = require_roles("CRM Lead", "Manager", "Area")
+PRIV = require_roles("Manager", "CRM Lead")          # lihat pengaturan, ekspor, campaign, stiker ZIP
+LEAD = require_roles("Manager", "CRM Lead")          # aksi operasional: pengaturan, member, nomor crew
+MGR = require_roles("Manager")                       # kelola akun admin, job, data contoh
+WRITE = require_roles("Manager", "CRM Lead", "Area")
 
 
 async def audit(db, user: dict, action: str, target: str | None = None, detail: dict | None = None):
@@ -551,7 +552,7 @@ async def list_users(user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depe
 
 
 @router.post("/users")
-async def create_user(body: AdminUserIn, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+async def create_user(body: AdminUserIn, user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
     if body.role not in ADMIN_ROLES:
         raise HTTPException(422, {"code": "bad_role", "message": "Role tidak dikenal."})
     if await db.admin_users.find_one({"name": body.name}):
@@ -564,7 +565,7 @@ async def create_user(body: AdminUserIn, user: dict = Depends(LEAD), db: AsyncIO
 
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: str, body: AdminUserIn, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+async def update_user(user_id: str, body: AdminUserIn, user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
     if body.role not in ADMIN_ROLES:
         raise HTTPException(422, {"code": "bad_role", "message": "Role tidak dikenal."})
     upd = {"name": body.name, "role": body.role, "areas": body.areas, "email": body.email}
@@ -580,7 +581,7 @@ async def update_user(user_id: str, body: AdminUserIn, user: dict = Depends(LEAD
 
 
 @router.post("/users/{user_id}/toggle-active")
-async def toggle_user(user_id: str, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+async def toggle_user(user_id: str, user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
     u = await db.admin_users.find_one({"_id": user_id})
     if not u:
         raise HTTPException(404, {"code": "not_found", "message": "User tidak ditemukan."})
@@ -599,7 +600,7 @@ async def audit_list(user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depe
 # ---------- Job & export ----------
 
 @router.post("/jobs/{job}/run")
-async def run_job(job: str, user: dict = Depends(PRIV)):
+async def run_job(job: str, user: dict = Depends(MGR)):
     fn = JOBS.get(job)
     if not fn:
         raise HTTPException(404, {"code": "not_found", "message": "Job tidak dikenal."})
@@ -656,7 +657,7 @@ async def export(kind: str, from_: str | None = Query(default=None, alias="from"
 # ---------- Data contoh ----------
 
 @router.post("/seed")
-async def seed(user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+async def seed(user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
     """Isi outlet pilot Braga; hanya bila belum ada outlet."""
     if await db.outlets.count_documents({}) > 0:
         raise HTTPException(409, {"code": "not_empty", "message": "Database sudah berisi outlet."})

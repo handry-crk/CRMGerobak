@@ -50,7 +50,7 @@ const NAV = [
 
 export default function Admin() {
   const [user, setUser] = useState(getAdmin()?.user || null)
-  const FALLBACK_META = { areas: ['Jakarta', 'Bandung', 'Bekasi', 'Depok', 'Bogor', 'Tangsel', 'Tangerang'], roles: ['CRM Lead', 'Manager', 'Area', 'Viewer'] }
+  const FALLBACK_META = { areas: ['Jakarta', 'Bandung', 'Bekasi', 'Depok', 'Bogor', 'Tangsel', 'Tangerang'], roles: ['Manager', 'CRM Lead', 'Area', 'Viewer'] }
   const [meta, setMeta] = useState(FALLBACK_META)
   const [toast, setToast] = useState('')
 
@@ -63,8 +63,9 @@ export default function Admin() {
   function notify(msg) { setToast(msg); setTimeout(() => setToast(''), 2500) }
 
   if (!user) return <Login onLogin={setUser} />
-  const privileged = ['CRM Lead', 'Manager'].includes(user.role)
-  const ctx = { user, meta, notify, privileged, lead: user.role === 'CRM Lead' }
+  const privileged = ['Manager', 'CRM Lead'].includes(user.role)
+  // lead = boleh aksi operasional (Manager & CRM Lead); manager = akses penuh (kelola admin, job)
+  const ctx = { user, meta, notify, privileged, lead: privileged, manager: user.role === 'Manager' }
 
   return (
     <div className="min-h-screen bg-[#FAF7F7]">

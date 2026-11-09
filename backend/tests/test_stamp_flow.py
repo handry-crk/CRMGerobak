@@ -292,3 +292,18 @@ async def test_concurrent_double_scan_grants_once(client, outlets):
     assert granted.count(True) == 1, granted
     m = await db.members.find_one({"_id": mid})
     assert m["stampsActive"] == 1
+
+
+async def test_manager_full_access_crm_lead_operational(client, admin, outlets):
+    me = (await client.get("/api/admin/me", headers=admin)).json()
+    assert me["role"] == "Manager"
+    r = await client.post("/api/admin/users", json={"name": "Lead CRM", "role": "CRM Lead", "pin": "4444"}, headers=admin)
+    assert r.status_code == 200
+    lead = {"Authorization": f"Bearer {(await client.post('/api/admin/login', json={'name': 'Lead CRM', 'pin': '4444'})).json()['token']}"}
+    # CRM Lead: boleh operasional
+    assert (await client.put("/api/admin/settings", json={"minMinutesBetweenStamps": 15}, headers=lead)).status_code == 200
+    assert (await client.post("/api/admin/staff", json={"phone": "08990000111", "name": "Crew"}, headers=lead)).status_code == 200
+    assert (await client.get("/api/admin/export/members.csv", headers=lead)).status_code == 200
+    # CRM Lead: tidak boleh kelola admin & job
+    assert (await client.post("/api/admin/users", json={"name": "X", "role": "Viewer", "pin": "1111"}, headers=lead)).status_code == 403
+    assert (await client.post("/api/admin/jobs/backup/run", headers=lead)).status_code == 403

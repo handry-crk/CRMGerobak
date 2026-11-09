@@ -32,10 +32,10 @@ Buka `http://localhost:8000/admin` → login **Admin / 1234** → Pengaturan →
 2. **Rahasia**: `DEFAULT_ADMIN_PIN` (4–6 angka, dipakai saat admin pertama dibuat — kalau admin sudah ada, ganti PIN lewat Pengaturan → Admin), `METRICS_API_KEY` (acak panjang), `SECRET_KEY`.
 3. `PUBLIC_BASE_URL` = `https://…up.railway.app` (atau domain sendiri; QR stiker dicetak dari nilai ini — jangan diganti setelah stiker dicetak).
 4. Pengaturan di dashboard: kembalikan **Jeda minimal = 20**, **Maks. stamp/hari = 2** bila sempat diubah untuk uji; isi **Email digest** dan SMTP bila ingin email harian.
-5. Buat admin per role (CRM Lead, Manager, Area Bandung, Viewer) dan **nonaktifkan/ganti PIN akun Admin bawaan**.
+5. Buat admin per role (Manager, CRM Lead, Area Bandung, Viewer) dan **nonaktifkan/ganti PIN akun Admin bawaan**.
 6. Impor outlet pilot (CSV dengan koordinat) → unduh stiker A6 + tent card → cetak → tempel di sisi gerobak dekat QRIS (bukan di meja goreng).
 7. Masukkan nomor crew & keluarga (tab Anti-fraud). Briefing crew satu kalimat + cara mengenali layar hijau (ada di tent card).
-8. **Lupa PIN CRM Lead?** Set variabel `RESET_ADMIN_PIN=true` dan `DEFAULT_ADMIN_PIN=<pin baru>` → tunggu deploy ulang → login `Admin` → **hapus** `RESET_ADMIN_PIN`. Variabel `DEFAULT_ADMIN_PIN` sendiri hanya dipakai saat akun pertama dibuat.
+8. **Lupa PIN Manager (akun Admin)?** Set variabel `RESET_ADMIN_PIN=true` dan `DEFAULT_ADMIN_PIN=<pin baru>` → tunggu deploy ulang → login `Admin` → **hapus** `RESET_ADMIN_PIN`. Variabel `DEFAULT_ADMIN_PIN` sendiri hanya dipakai saat akun pertama dibuat.
 9. Backup: jalankan **Backup sekarang** mingguan dan unduh — disk Railway tidak permanen; atau aktifkan backup otomatis di MongoDB Atlas.
 
 ## Jalankan produksi
@@ -55,7 +55,7 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 5. `/saya` — progres, voucher, riwayat, opt-out WA, pindah HP (ketik nomor; OTP = Iterasi 1).
 
 ## Admin (`/admin`, login nama + PIN; 5× salah → kunci 15 menit)
-Role **CRM Lead** (semua), **Manager** (semua kecuali ubah pengaturan/aksi member), **Area** (hanya area yang ditugaskan, nomor dimasker), **Viewer** (baca, nomor dimasker).
+Role **Manager** (akses penuh: termasuk kelola akun admin, job, data contoh), **CRM Lead** (operasional: pengaturan program, member, nomor crew, campaign, ekspor), **Area** (hanya area yang ditugaskan, nomor dimasker), **Viewer** (baca, nomor dimasker). Akun bawaan `Admin` = Manager.
 Ringkasan (member baru, aktif 30D, stamp, scan rate, repeat 30D, redemption, Balik Lagi, rating, grafik per hari/jam/minggu, top/bottom outlet, perlu dicek, lonjakan) · Outlet & QR (CRUD, impor CSV, heatmap hari×jam, transaksi POS manual, stiker A6/tent card PDF, ZIP per area, **Ganti QR**) · Member (cari, detail, ±stamp, voucher manual, blokir, hapus/anonimkan — semua dengan alasan → audit log) · Voucher (statistik, campaign per segmen) · Rating · Pengaturan (program, anti-abuse, Balik Lagi, promo aktif, admin, job, audit).
 
 ## Anti-fraud crew (lapis 1 + 3)
