@@ -150,6 +150,16 @@ async def bootstrap(db: AsyncIOMotorDatabase) -> None:
     await ensure_indexes(db)
     if not await db.settings.find_one({"_id": "main"}):
         await db.settings.insert_one({**DEFAULT_SETTINGS, "adminEmail": config.admin_email})
+    if config.reset_admin_pin:
+        import logging
+        res = await db.admin_users.update_one(
+            {"_id": "adm_default"},
+            {"$set": {"pinHash": hash_pin(config.default_admin_pin), "role": "CRM Lead", "active": True,
+                      "failedAttempts": 0, "lockedUntil": None}},
+        )
+        logging.getLogger("db").warning(
+            "RESET_ADMIN_PIN=true: PIN akun 'Admin' di-set ulang ke DEFAULT_ADMIN_PIN (%s). "
+            "Segera hapus variabel RESET_ADMIN_PIN setelah berhasil login.", "ditemukan" if res.matched_count else "akun belum ada, dibuat baru")
     if await db.admin_users.count_documents({}) == 0:
         await db.admin_users.insert_one(
             {

@@ -35,7 +35,8 @@ Buka `http://localhost:8000/admin` → login **Admin / 1234** → Pengaturan →
 5. Buat admin per role (CRM Lead, Manager, Area Bandung, Viewer) dan **nonaktifkan/ganti PIN akun Admin bawaan**.
 6. Impor outlet pilot (CSV dengan koordinat) → unduh stiker A6 + tent card → cetak → tempel di sisi gerobak dekat QRIS (bukan di meja goreng).
 7. Masukkan nomor crew & keluarga (tab Anti-fraud). Briefing crew satu kalimat + cara mengenali layar hijau (ada di tent card).
-8. Backup: jalankan **Backup sekarang** mingguan dan unduh — disk Railway tidak permanen; atau aktifkan backup otomatis di MongoDB Atlas.
+8. **Lupa PIN CRM Lead?** Set variabel `RESET_ADMIN_PIN=true` dan `DEFAULT_ADMIN_PIN=<pin baru>` → tunggu deploy ulang → login `Admin` → **hapus** `RESET_ADMIN_PIN`. Variabel `DEFAULT_ADMIN_PIN` sendiri hanya dipakai saat akun pertama dibuat.
+9. Backup: jalankan **Backup sekarang** mingguan dan unduh — disk Railway tidak permanen; atau aktifkan backup otomatis di MongoDB Atlas.
 
 ## Jalankan produksi
 ```bash

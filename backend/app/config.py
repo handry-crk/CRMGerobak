@@ -13,6 +13,7 @@ class Config(BaseSettings):
     secret_key: str = "ganti-dengan-rahasia-panjang"
     default_admin_name: str = "Admin"
     default_admin_pin: str = "1234"
+    reset_admin_pin: bool = False  # true = saat start, PIN akun "Admin" bawaan di-set ulang ke default_admin_pin & dibuka kuncinya
     metrics_api_key: str = "ganti-api-key-metrics"
     admin_email: str = ""
     smtp_host: str = ""
