@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import config
-from .db import bootstrap, connect_or_fallback
+from .db import DB_STATUS, bootstrap, connect_or_fallback
 from .routers import admin, metrics, public
 from .services.jobs import build_scheduler
 
@@ -65,7 +65,8 @@ app.include_router(metrics.router)
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "app": config.app_name}
+    """Status untuk monitoring; `db.persistent` harus true di produksi."""
+    return {"ok": True, "app": config.app_name, "db": DB_STATUS}
 
 
 # Serve frontend build (single container) bila folder static ada; fallback ke index.html untuk SPA routing

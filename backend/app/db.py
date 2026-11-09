@@ -8,6 +8,7 @@ from .utils import hash_pin, iso, now_utc
 
 _client: AsyncIOMotorClient | None = None
 _db: AsyncIOMotorDatabase | None = None
+DB_STATUS = {"mode": "unknown", "persistent": False, "detail": ""}
 
 DEFAULT_SETTINGS: dict = {
     "_id": "main",
@@ -99,14 +100,18 @@ async def connect_or_fallback() -> AsyncIOMotorDatabase:
     db = get_db()
     if config.use_mock_db:
         log.warning("USE_MOCK_DB=true — database in-memory, DATA TIDAK TERSIMPAN setelah restart.")
+        DB_STATUS.update(mode="in-memory", persistent=False, detail="USE_MOCK_DB=true")
         return db
     try:
         await db.command("ping")
-        log.info("MongoDB terhubung: %s", config.mongo_url.split("@")[-1])
+        host = config.mongo_url.split("@")[-1].split("/")[0]
+        log.info("MongoDB terhubung: %s", host)
+        DB_STATUS.update(mode="mongodb", persistent=True, detail=host)
         return db
     except Exception as e:  # noqa: BLE001
         log.error("MongoDB tidak terjangkau (%s). Beralih ke database in-memory — DATA TIDAK TERSIMPAN. "
                   "Isi MONGO_URL yang benar untuk produksi.", e)
+        DB_STATUS.update(mode="in-memory", persistent=False, detail="MongoDB tidak terjangkau: " + type(e).__name__)
         use_mock_client()
         return get_db()
 
