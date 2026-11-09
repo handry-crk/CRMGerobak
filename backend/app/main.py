@@ -55,7 +55,13 @@ app.add_middleware(
 async def validation_handler(request: Request, exc: RequestValidationError):
     first = exc.errors()[0] if exc.errors() else {}
     loc = ".".join(str(p) for p in first.get("loc", []) if p != "body")
-    return JSONResponse(422, {"detail": {"code": "validation", "message": f"Data belum lengkap atau tidak valid ({loc})."}})
+    return JSONResponse(status_code=422, content={"detail": {"code": "validation", "message": f"Data belum lengkap atau tidak valid ({loc})."}})
+
+
+@app.exception_handler(Exception)
+async def unhandled_handler(request: Request, exc: Exception):
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": {"code": "server_error", "message": "Ada gangguan sebentar, coba lagi ya."}})
 
 
 app.include_router(public.router)

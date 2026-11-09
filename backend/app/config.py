@@ -25,6 +25,8 @@ class Config(BaseSettings):
     enable_scheduler: bool = True
     use_mock_db: bool = False  # True = in-memory (mongomock) untuk coba cepat tanpa MongoDB; data hilang saat restart
     cors_origins: str = "*"
+    rate_limit_ip_per_min: int = 120     # banyak HP berbagi 1 IP publik (CGNAT operator) → jangan terlalu ketat
+    rate_limit_phone_per_min: int = 10
 
 
 config = Config()

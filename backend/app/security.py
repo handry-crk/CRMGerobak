@@ -133,3 +133,32 @@ async def current_member(
     if not member:
         raise HTTPException(401, {"code": "unknown_device", "message": "Masukkan nomor WhatsApp dulu ya, Kak."})
     return member
+
+
+# ---------- Validasi tanggal ----------
+
+def parse_day(value: str | None, default: str) -> str:
+    """Terima 'YYYY-MM-DD'; kosong → default; format lain → 422 ramah."""
+    from datetime import datetime
+    if not value:
+        return default
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(422, {"code": "bad_date", "message": "Format tanggal harus YYYY-MM-DD."})
+
+
+def day_range(from_: str | None, to: str | None, default_days: int) -> tuple[str, str]:
+    from .utils import add_days, today_wib
+    to_d = parse_day(to, today_wib())
+    from_d = parse_day(from_, add_days(to_d, -default_days))
+    if from_d > to_d:
+        from_d, to_d = to_d, from_d
+    if (datetime_days(from_d, to_d)) > 400:
+        raise HTTPException(422, {"code": "range_too_long", "message": "Rentang maksimal 400 hari."})
+    return from_d, to_d
+
+
+def datetime_days(a: str, b: str) -> int:
+    from datetime import datetime
+    return (datetime.strptime(b, "%Y-%m-%d") - datetime.strptime(a, "%Y-%m-%d")).days

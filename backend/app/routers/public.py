@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
+from ..config import config
 from ..db import (FEEDBACK_TAGS, PRODUCT_TAGS, PRODUCT_TAGS_BY_GROUP, RATING_GROUPS, RATING_SCALE, SERVICE_TAGS,
                   SERVICE_TAGS_BY_GROUP, SOURCES, get_db, get_settings, rating_group)
 from ..security import client_ip, current_member, enforce_rate
@@ -68,9 +69,9 @@ async def get_outlet(qr_token: str, db: AsyncIOMotorDatabase = Depends(get_db)):
 @router.post("/stamp")
 async def post_stamp(body: StampIn, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     ip = client_ip(request)
-    enforce_rate(f"ip:{ip}", 30)
+    enforce_rate(f"ip:{ip}", config.rate_limit_ip_per_min)
     if body.phone:
-        enforce_rate(f"phone:{normalize_phone(body.phone) or body.phone}", 10)
+        enforce_rate(f"phone:{normalize_phone(body.phone) or body.phone}", config.rate_limit_phone_per_min)
     settings = await get_settings(db)
     try:
         return await stamp_svc.process_stamp(
@@ -83,7 +84,7 @@ async def post_stamp(body: StampIn, request: Request, db: AsyncIOMotorDatabase =
 
 @router.post("/feedback")
 async def post_feedback(body: FeedbackIn, member: dict = Depends(current_member), db: AsyncIOMotorDatabase = Depends(get_db)):
-    stamp = await db.stamps.find_one({"_id": body.stampId, "memberId": member["_id"]})
+    stamp = await db.stamps.find_one({"_id": body.stampId, "memberId": member["_id"], "granted": True})
     if not stamp:
         raise HTTPException(404, {"code": "stamp_unknown", "message": "Kunjungan tidak ditemukan."})
     if body.rating is None and body.service is None:
@@ -181,7 +182,7 @@ async def opt_out(member: dict = Depends(current_member), db: AsyncIOMotorDataba
 @router.post("/me/switch-device")
 async def switch_device(body: SwitchIn, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     """Lanjutkan akun di HP baru dengan mengetik nomor (v1 tanpa OTP; lihat Iterasi 1)."""
-    enforce_rate(f"ip:{client_ip(request)}", 10)
+    enforce_rate(f"ip:{client_ip(request)}:switch", config.rate_limit_phone_per_min)
     phone = normalize_phone(body.phone)
     if not phone:
         raise HTTPException(422, {"code": "bad_phone", "message": "Nomor WhatsApp-nya belum pas, Kak."})

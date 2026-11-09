@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from ..config import config
 from ..db import get_db
+from ..security import day_range, parse_day
 from ..services import analytics
 from ..utils import add_days, today_wib
 
@@ -19,8 +20,7 @@ def check_key(x_api_key: str | None = Header(default=None)):
 
 @router.get("/ratings", dependencies=[Depends(check_key)])
 async def ratings(from_: str | None = Query(default=None, alias="from"), to: str | None = None, db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     outlets = {o["_id"]: o async for o in db.outlets.find({})}
     agg: dict = {}
     async for f in db.feedback.find({"at": {"$gte": from_, "$lte": to + "T23:59:59Z"}}):
@@ -47,7 +47,7 @@ async def ratings(from_: str | None = Query(default=None, alias="from"), to: str
 @router.get("/crm", dependencies=[Depends(check_key)])
 async def crm(date: str | None = None, db: AsyncIOMotorDatabase = Depends(get_db)):
     """KPI CRM Lead di Daily Tracker: member (member baru) & loyalty (redemption loyalty) pada tanggal tsb."""
-    day = date or today_wib()
+    day = parse_day(date, today_wib())
     member = await db.members.count_documents({"joinedDay": day})
     loyalty = await db.vouchers.count_documents({"status": "used", "usedAt": {"$gte": day, "$lte": day + "T23:59:59Z"}})
     stamps = await db.stamps.count_documents({"day": day, "granted": True})
@@ -56,8 +56,7 @@ async def crm(date: str | None = None, db: AsyncIOMotorDatabase = Depends(get_db
 
 @router.get("/promo", dependencies=[Depends(check_key)])
 async def promo(code: str, from_: str | None = Query(default=None, alias="from"), to: str | None = None, db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     code = code.upper()
     per: dict = {}
     async for s in db.stamps.find({"day": {"$gte": from_, "$lte": to}, "granted": True}, {"outletCode": 1, "day": 1, "promoCode": 1}):
@@ -75,7 +74,6 @@ async def promo(code: str, from_: str | None = Query(default=None, alias="from")
 
 @router.get("/summary", dependencies=[Depends(check_key)])
 async def summary(from_: str | None = Query(default=None, alias="from"), to: str | None = None, area: str | None = None, db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     data = await analytics.summary(db, from_, to, area, {})
     return {"range": data["range"], "kpi": data["kpi"]}

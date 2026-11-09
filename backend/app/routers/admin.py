@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from ..config import config
 from ..db import ADMIN_ROLES, AREAS, DEFAULT_SETTINGS, RATING_GROUPS, RATING_SCALE, get_db, get_settings, rating_group
 from ..security import (
-    admin_login, admin_public, area_filter, can_see_full_phone, current_admin, new_pin_hash, require_roles,
+    day_range, parse_day, admin_login, admin_public, area_filter, can_see_full_phone, current_admin, new_pin_hash, require_roles,
 )
 from ..services import analytics
 from ..services.jobs import JOBS
@@ -96,8 +96,7 @@ async def summary(
     from_: str | None = Query(default=None, alias="from"), to: str | None = None, area: str | None = None,
     user: dict = Depends(current_admin), db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     data = await analytics.summary(db, from_, to, area, area_filter(user))
     if not can_see_full_phone(user):
         for f in data["flagged"]:
@@ -164,8 +163,7 @@ async def outlet_detail(outlet_id: str, from_: str | None = Query(default=None, 
     o = await db.outlets.find_one({"_id": outlet_id, **area_filter(user)})
     if not o:
         raise HTTPException(404, {"code": "not_found", "message": "Outlet tidak ditemukan."})
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     detail = await analytics.outlet_detail(db, o, from_, to)
     return {"outlet": outlet_admin(o), **detail}
 
@@ -187,9 +185,10 @@ async def set_transactions(outlet_id: str, body: TxIn, user: dict = Depends(WRIT
     o = await db.outlets.find_one({"_id": outlet_id, **area_filter(user)})
     if not o:
         raise HTTPException(404, {"code": "not_found", "message": "Outlet tidak ditemukan."})
+    day = parse_day(body.day, today_wib())
     upd = {k: v for k, v in body.model_dump().items() if k != "day" and v is not None}
     await db.outlet_transactions.update_one(
-        {"outletId": outlet_id, "day": body.day},
+        {"outletId": outlet_id, "day": day},
         {"$set": {**upd, "updatedBy": user["name"], "updatedAt": iso(now_utc())}},
         upsert=True,
     )
@@ -245,8 +244,7 @@ async def remove_staff(staff_id: str, user: dict = Depends(LEAD), db: AsyncIOMot
 @router.get("/reconciliation")
 async def reconciliation(from_: str | None = Query(default=None, alias="from"), to: str | None = None,
                          user: dict = Depends(current_admin), db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -13)
+    from_, to = day_range(from_, to, 13)
     data = await analytics.reconciliation(db, from_, to, area_filter(user))
     alerts = [{**a, "id": a.pop("_id")} async for a in db.alerts.find({"day": {"$gte": from_, "$lte": to}}).sort("at", -1).limit(100)]
     for a in alerts:
@@ -284,9 +282,18 @@ async def stickers_zip(area: str | None = None, user: dict = Depends(current_adm
 @router.post("/outlets/import")
 async def import_outlets(file: UploadFile, user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depends(get_db)):
     """CSV: code,name,area,city,address,lat,lng,priceZone (koma atau titik koma)."""
-    raw = (await file.read()).decode("utf-8-sig")
-    dialect = csv.Sniffer().sniff(raw[:2048], delimiters=";,")
+    try:
+        raw = (await file.read()).decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(422, {"code": "bad_file", "message": "File harus CSV teks (UTF-8)."})
+    try:
+        dialect = csv.Sniffer().sniff(raw[:2048], delimiters=";,")
+    except csv.Error:
+        dialect = csv.excel if raw.count(",") >= raw.count(";") else csv.excel_tab
+        dialect = type("D", (csv.excel,), {"delimiter": "," if raw.count(",") >= raw.count(";") else ";"})
     reader = csv.DictReader(io.StringIO(raw), dialect=dialect)
+    if not reader.fieldnames or "code" not in [f.strip() for f in reader.fieldnames]:
+        raise HTTPException(422, {"code": "bad_header", "message": "Header CSV harus memuat kolom code, name, area."})
     created, updated, errors = 0, 0, []
     for i, row in enumerate(reader, start=2):
         row = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
@@ -294,10 +301,15 @@ async def import_outlets(file: UploadFile, user: dict = Depends(PRIV), db: Async
         if not code or not row.get("name") or row.get("area") not in AREAS:
             errors.append(f"Baris {i}: code/name/area tidak valid")
             continue
+        try:
+            lat = float(row["lat"].replace(",", ".")) if row.get("lat") else None
+            lng = float(row["lng"].replace(",", ".")) if row.get("lng") else None
+        except ValueError:
+            errors.append(f"Baris {i}: lat/lng bukan angka")
+            continue
         doc = {
             "name": row["name"], "area": row["area"], "city": row.get("city") or row["area"], "address": row.get("address"),
-            "lat": float(row["lat"].replace(",", ".")) if row.get("lat") else None,
-            "lng": float(row["lng"].replace(",", ".")) if row.get("lng") else None,
+            "lat": lat, "lng": lng,
             "priceZone": row.get("priceZone") or ("bandung" if row["area"] == "Bandung" else "jabodetabek"), "active": True,
         }
         existing = await db.outlets.find_one({"code": code})
@@ -326,7 +338,9 @@ async def list_members(q: str | None = None, flagged: bool = False, page: int = 
         if phone:
             query["phone"] = phone
         else:
-            query["$or"] = [{"name": {"$regex": q, "$options": "i"}}, {"phone": {"$regex": q.replace("+", "\\+")}}]
+            import re as _re
+            query["$or"] = [{"name": {"$regex": _re.escape(q), "$options": "i"}}, {"phone": {"$regex": _re.escape(q)}}]
+    page, size = max(1, page), min(max(1, size), 200)
     total = await db.members.count_documents(query)
     cur = db.members.find(query).sort("lastVisitAt", -1).skip((page - 1) * size).limit(size)
     full = can_see_full_phone(user)
@@ -450,6 +464,11 @@ async def voucher_stats(user: dict = Depends(current_admin), db: AsyncIOMotorDat
 @router.post("/campaigns")
 async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depends(get_db)):
     code = body.code.upper()
+    vf, vt = parse_day(body.validFrom, today_wib()), parse_day(body.validTo, today_wib())
+    if vt < vf:
+        raise HTTPException(422, {"code": "bad_range", "message": "Tanggal 'sampai' harus setelah 'mulai'."})
+    if body.segment == "area" and body.area not in AREAS:
+        raise HTTPException(422, {"code": "bad_area", "message": "Pilih area untuk segmen area."})
     if await db.campaigns.find_one({"code": code}):
         raise HTTPException(409, {"code": "dup", "message": "Kode campaign sudah ada."})
     q: dict = {"blocked": {"$ne": True}, "optIn": True}
@@ -461,7 +480,7 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: Asyn
     elif body.segment == "minVisits":
         q["visits"] = {"$gte": int(body.minVisits or 1)}
     member_ids = [m["_id"] async for m in db.members.find(q, {"_id": 1})]
-    camp = {"_id": new_id("cmp"), **body.model_dump(), "code": code, "issued": len(member_ids), "createdAt": iso(now_utc()), "createdBy": user["name"]}
+    camp = {"_id": new_id("cmp"), **body.model_dump(), "code": code, "validFrom": vf, "validTo": vt, "issued": len(member_ids), "createdAt": iso(now_utc()), "createdBy": user["name"]}
     await db.campaigns.insert_one(camp)
     n = await create_campaign_vouchers(db, camp, member_ids)
     await audit(db, user, "campaign.create", camp["_id"], {"code": code, "issued": n})
@@ -474,8 +493,7 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: Asyn
 @router.get("/feedback")
 async def list_feedback(from_: str | None = Query(default=None, alias="from"), to: str | None = None, max_rating: int | None = None,
                         user: dict = Depends(current_admin), db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -29)
+    from_, to = day_range(from_, to, 29)
     q: dict = {"at": {"$gte": from_, "$lte": to + "T23:59:59Z"}, **area_filter(user)}
     if max_rating:
         q["rating"] = {"$lte": max_rating, "$ne": None}
@@ -623,8 +641,7 @@ def _csv(rows: list[dict], headers: list[str]) -> StreamingResponse:
 @router.get("/export/{kind}.csv")
 async def export(kind: str, from_: str | None = Query(default=None, alias="from"), to: str | None = None,
                  user: dict = Depends(PRIV), db: AsyncIOMotorDatabase = Depends(get_db)):
-    to = to or today_wib()
-    from_ = from_ or add_days(to, -89)
+    from_, to = day_range(from_, to, 89)
     outlets = {o["_id"]: o["code"] async for o in db.outlets.find({}, {"code": 1})}
     if kind == "members":
         rows = [{"id": m["_id"], "phone": m["phone"], "name": m.get("name"), "city": m.get("city"), "source": m.get("source"),
