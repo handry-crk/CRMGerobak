@@ -29,10 +29,12 @@ class StampIn(BaseModel):
 
 
 class FeedbackIn(BaseModel):
-    qrToken: str
-    stampId: str | None = None
-    rating: int = Field(ge=1, le=5)            # rasa cimol
-    service: int | None = Field(default=None, ge=1, le=5)  # pelayanan crew
+    """Dua tahap: `service` dinilai saat scan (baru beli); `rating` (rasa) dinilai setelah dimakan —
+    di kunjungan berikutnya atau dari halaman /saya — untuk stamp yang ditunjuk `stampId`."""
+    qrToken: str | None = None
+    stampId: str
+    rating: int | None = Field(default=None, ge=1, le=5)   # rasa cimol (setelah dimakan)
+    service: int | None = Field(default=None, ge=1, le=5)  # pelayanan crew (saat scan)
     tags: list[str] = []
     comment: str | None = Field(default=None, max_length=140)
     productNote: str | None = Field(default=None, max_length=140)  # ketik manual saat rasa Kecewa/Kurang
@@ -81,34 +83,45 @@ async def post_stamp(body: StampIn, request: Request, db: AsyncIOMotorDatabase =
 
 @router.post("/feedback")
 async def post_feedback(body: FeedbackIn, member: dict = Depends(current_member), db: AsyncIOMotorDatabase = Depends(get_db)):
-    outlet = await db.outlets.find_one({"qrToken": body.qrToken})
-    if not outlet:
-        raise HTTPException(404, {"code": "qr_unknown", "message": "QR tidak dikenal."})
-    allowed = set(PRODUCT_TAGS_BY_GROUP[rating_group(body.rating)])
-    if body.service:
-        allowed |= set(SERVICE_TAGS_BY_GROUP[rating_group(body.service)])
+    stamp = await db.stamps.find_one({"_id": body.stampId, "memberId": member["_id"]})
+    if not stamp:
+        raise HTTPException(404, {"code": "stamp_unknown", "message": "Kunjungan tidak ditemukan."})
+    if body.rating is None and body.service is None:
+        raise HTTPException(422, {"code": "empty", "message": "Pilih salah satu emoji dulu ya, Kak."})
+    outlet = await db.outlets.find_one({"_id": stamp["outletId"]})
+    existing = await db.feedback.find_one({"stampId": body.stampId}) or {}
+    rating = body.rating if body.rating is not None else existing.get("rating")
+    service = body.service if body.service is not None else existing.get("service")
+    allowed = set()
+    if rating:
+        allowed |= set(PRODUCT_TAGS_BY_GROUP[rating_group(rating)])
+    if service:
+        allowed |= set(SERVICE_TAGS_BY_GROUP[rating_group(service)])
     tags = [t for t in body.tags if t in allowed][:6]
+    product_note = ((body.productNote if body.productNote is not None else existing.get("productNote")) or "").strip() or None
+    service_note = ((body.serviceNote if body.serviceNote is not None else existing.get("serviceNote")) or "").strip() or None
     fields = {
-        "rating": body.rating, "ratingGroup": rating_group(body.rating),
-        "service": body.service, "serviceGroup": rating_group(body.service) if body.service else None,
+        "rating": rating, "ratingGroup": rating_group(rating) if rating else None, "ratingAt": iso(now_utc()) if body.rating is not None else existing.get("ratingAt"),
+        "service": service, "serviceGroup": rating_group(service) if service else None,
         "tags": tags, "tag": tags[0] if tags else None,
-        "productNote": (body.productNote or "").strip() or None if body.rating <= 2 else None,
-        "serviceNote": (body.serviceNote or "").strip() or None if (body.service or 5) <= 2 else None,
-        "complete": body.service is not None,
+        "productNote": product_note if (rating or 5) <= 2 else None,
+        "serviceNote": service_note if (service or 5) <= 2 else None,
+        "complete": service is not None,      # syarat tukar voucher di kunjungan ini
+        "tasteDone": rating is not None,
     }
     fields["comment"] = " · ".join(x for x in [
         f"Rasa: {fields['productNote']}" if fields["productNote"] else None,
         f"Pelayanan: {fields['serviceNote']}" if fields["serviceNote"] else None,
         (body.comment or "").strip() or None,
     ] if x) or None
-    if body.stampId and await db.feedback.find_one({"stampId": body.stampId}):
+    if existing:
         await db.feedback.update_one({"stampId": body.stampId}, {"$set": fields})
-        return {"ok": True, "complete": fields["complete"]}
-    await db.feedback.insert_one({
-        "_id": new_id("fbk"), "memberId": member["_id"], "outletId": outlet["_id"], "outletCode": outlet["code"],
-        "area": outlet["area"], "stampId": body.stampId, "at": iso(now_utc()), **fields,
-    })
-    return {"ok": True, "complete": fields["complete"]}
+    else:
+        await db.feedback.insert_one({
+            "_id": new_id("fbk"), "memberId": member["_id"], "outletId": stamp["outletId"], "outletCode": outlet["code"] if outlet else stamp.get("outletCode"),
+            "area": stamp.get("area"), "stampId": body.stampId, "at": iso(now_utc()), **fields,
+        })
+    return {"ok": True, "complete": fields["complete"], "tasteDone": fields["tasteDone"]}
 
 
 @router.post("/profile")
@@ -154,6 +167,7 @@ async def get_me(member: dict = Depends(current_member), db: AsyncIOMotorDatabas
         "vouchers": vouchers,
         "history": history,
         "sources": list(SOURCES),
+        "pendingTaste": await stamp_svc.pending_taste(db, member["_id"]),
     }
 
 

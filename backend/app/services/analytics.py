@@ -108,8 +108,9 @@ async def summary(db: AsyncIOMotorDatabase, from_day: str, to_day: str, area: st
         fq["outletId"] = {"$in": outlet_ids}
     ratings, services, groups = [], [], Counter()
     async for f in db.feedback.find(fq, {"rating": 1, "service": 1}):
-        ratings.append(f["rating"])
-        groups["puas" if f["rating"] >= 4 else ("biasa" if f["rating"] == 3 else "tidak_puas")] += 1
+        if f.get("rating"):
+            ratings.append(f["rating"])
+            groups["puas" if f["rating"] >= 4 else ("biasa" if f["rating"] == 3 else "tidak_puas")] += 1
         if f.get("service"):
             services.append(f["service"])
     avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
@@ -200,10 +201,10 @@ async def outlet_detail(db: AsyncIOMotorDatabase, outlet: dict, from_day: str, t
     for s in stamps:
         heat[s["day"]][s.get("hour", 0)] += 1
     feedback = [
-        {"at": f["at"], "rating": f["rating"], "service": f.get("service"), "tags": f.get("tags") or ([f["tag"]] if f.get("tag") else []), "comment": f.get("comment")}
+        {"at": f["at"], "rating": f.get("rating"), "service": f.get("service"), "tags": f.get("tags") or ([f["tag"]] if f.get("tag") else []), "comment": f.get("comment")}
         async for f in db.feedback.find({"outletId": outlet["_id"]}).sort("at", -1).limit(50)
     ]
-    ratings = [f["rating"] for f in feedback]
+    ratings = [f["rating"] for f in feedback if f.get("rating")]
     tx = {t["day"]: t async for t in db.outlet_transactions.find({"outletId": outlet["_id"], "day": {"$gte": from_day, "$lte": to_day}})}
     members = len({s["memberId"] for s in stamps})
     return {

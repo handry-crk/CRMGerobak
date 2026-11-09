@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, fmtTanggal, getDevice, lastQr, setDevice } from '../api.js'
 import { Dots, Header, PhoneForm, RedeemFlow, VoucherCard } from '../components/Shared.jsx'
+import { FeedbackBlock, useFeedbackMeta } from '../components/Feedback.jsx'
 
 export default function Me() {
   const [data, setData] = useState(null)
@@ -10,6 +11,7 @@ export default function Me() {
   const [redeem, setRedeem] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const qr = lastQr()
+  const meta = useFeedbackMeta()
 
   async function load() {
     try {
@@ -60,6 +62,14 @@ export default function Me() {
         <div className="text-xs text-charcoal/60 mt-1">{member.visits} kunjungan · gabung {fmtTanggal(member.joinedAt)}</div>
       </section>
 
+      {data.pendingTaste && (
+        <section className="px-4 mt-6">
+          <div className="card border-brand">
+            <FeedbackBlock kind="taste" stampId={data.pendingTaste.stampId} meta={meta} onDone={() => setTimeout(load, 1500)}
+              title={`Cimol dari ${data.pendingTaste.outletName} ${data.pendingTaste.whenText}, rasanya gimana?`} />
+          </div>
+        </section>
+      )}
       {active.length > 0 && (
         <section className="px-4 mt-6 space-y-3">
           <div className="font-extrabold">Voucher aktif</div>

@@ -157,7 +157,10 @@ async def redeem_voucher(
     if settings.get("feedbackRequired", True) and recent.get("granted") and not member.get("isStaff"):
         fb = await db.feedback.find_one({"stampId": recent["_id"], "complete": True})
         if not fb:
-            raise RedeemError("Isi rating rasa & pelayanan dulu ya, Kak, baru voucher bisa ditukar.", "need_feedback")
+            raise RedeemError("Isi rating pelayanan dulu ya, Kak, baru voucher bisa ditukar.", "need_feedback")
+        from .stamp import pending_taste
+        if await pending_taste(db, member["_id"], exclude_stamp_id=recent["_id"]):
+            raise RedeemError("Kasih nilai rasa cimol kunjungan sebelumnya dulu ya, Kak.", "need_taste")
 
     # Lapis 1: kuota penukaran per gerobak per hari
     quota = int(settings.get("maxRedemptionsPerOutletPerDay", 0) or 0)

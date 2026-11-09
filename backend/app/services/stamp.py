@@ -268,6 +268,24 @@ async def process_stamp(
     return await build_response(db, settings, outlet, fresh, stamp, is_new, welcome, token, reward)
 
 
+async def pending_taste(db: AsyncIOMotorDatabase, member_id: str, exclude_stamp_id: str | None = None, days: int = 14) -> dict | None:
+    """Kunjungan terakhir (≤14 hari) yang rasa cimolnya belum dinilai — ditanya di kunjungan berikutnya / halaman saya."""
+    from ..utils import add_days, format_tanggal
+    since = add_days(today_wib(), -days)
+    cur = db.stamps.find({"memberId": member_id, "granted": True, "day": {"$gte": since}}).sort("at", -1).limit(10)
+    async for s in cur:
+        if s["_id"] == exclude_stamp_id:
+            continue
+        fb = await db.feedback.find_one({"stampId": s["_id"]})
+        if fb and fb.get("rating"):
+            return None  # yang terbaru sudah dinilai → tidak ada yang tertunda
+        outlet = await db.outlets.find_one({"_id": s["outletId"]}, {"name": 1})
+        today = today_wib()
+        when = "tadi" if s["day"] == today else ("kemarin" if s["day"] == add_days(today, -1) else format_tanggal(s["day"]))
+        return {"stampId": s["_id"], "outletName": outlet["name"] if outlet else s.get("outletCode"), "day": s["day"], "whenText": when}
+    return None
+
+
 async def build_response(
     db, settings, outlet, member, stamp, is_new, welcome, device_token, reward=None
 ) -> dict:
@@ -313,4 +331,6 @@ async def build_response(
         "askProfile": ask_profile,
         "askFeedback": bool(settings.get("feedbackPrompt", True)) and stamp["granted"] and not member.get("isStaff"),
         "feedbackRequired": bool(settings.get("feedbackRequired", True)) and stamp["granted"] and not member.get("isStaff"),
+        # Rasa cimol dari kunjungan sebelumnya yang belum dinilai (ditanya sekarang, setelah dimakan)
+        "pendingTaste": None if member.get("isStaff") else await pending_taste(db, member["_id"], exclude_stamp_id=stamp["_id"]),
     }

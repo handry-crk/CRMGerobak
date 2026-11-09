@@ -49,7 +49,7 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 
 ## Alur customer
 1. `/s/{qrToken}` — perangkat dikenal → `POST /api/stamp` langsung; belum dikenal → form nomor WA.
-2. Hasil: dots progres, headline, **rating wajib** dua baris emoji — rasa cimol & pelayanan crew (😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget; kelompok Tidak puas/Biasa/Puas) + tag, komentar bila ≤ Kurang; voucher baru bisa ditukar setelah rating lengkap (`feedbackRequired`). Lalu chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
+2. Hasil: dots progres, headline, **rating wajib dua tahap** (emoji 😖 Kecewa · 😕 Kurang · 🙂 Biasa aja · 😄 Puas · 🤩 Puas banget; kelompok Tidak puas/Biasa/Puas; tag mengikuti emoji; tulis sendiri bila ≤ Kurang): **pelayanan crew** dinilai saat scan (baru beli), **rasa cimol** dinilai setelah dimakan — ditanya di kunjungan berikutnya ("Cimol dari Gerobak Braga kemarin, rasanya gimana?") atau di `/saya`. Voucher baru bisa ditukar setelah pelayanan hari ini + rasa kunjungan lalu terisi (`feedbackRequired`). Lalu chip promo aktif, pertanyaan profil (kunjungan ke-2, maks. 2× lewati), voucher.
 3. Stamp ke-5 → voucher `stamp_reward` (30 hari). Member baru → voucher **Balik Lagi** aktif H+3 selama 7 hari.
 4. **Tukar sekarang** hanya jika sudah scan gerobak dalam 60 menit terakhir → layar hijau + kode 4 huruf + hitung mundur.
 5. `/saya` — progres, voucher, riwayat, opt-out WA, pindah HP (ketik nomor; OTP = Iterasi 1).
@@ -76,7 +76,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 23 skenario acceptance (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 24 skenario acceptance (mongomock, tanpa server Mongo)
 ```
 
 ## Roadmap (Iterasi di build spec)

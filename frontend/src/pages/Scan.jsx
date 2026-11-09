@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, getDevice, rememberQr, requestId, setDevice } from '../api.js'
 import { Confetti, Dots, Header, PhoneForm, RedeemFlow, VoucherCard } from '../components/Shared.jsx'
+import { FeedbackBlock, useFeedbackMeta } from '../components/Feedback.jsx'
 
-const FALLBACK_SCALE = [
-  { value: 1, emoji: '😖', label: 'Kecewa' }, { value: 2, emoji: '😕', label: 'Kurang' }, { value: 3, emoji: '🙂', label: 'Biasa aja' },
-  { value: 4, emoji: '😄', label: 'Puas' }, { value: 5, emoji: '🤩', label: 'Puas banget' },
-]
 
 function getPosition(timeoutMs = 1500) {
   return new Promise((resolve) => {
@@ -26,18 +23,9 @@ export default function Scan() {
   const [outlet, setOutlet] = useState(null)
   const [busy, setBusy] = useState(false)
   const [formErr, setFormErr] = useState('')
-  const [meta, setMeta] = useState({ productTagsByGroup: {}, serviceTagsByGroup: {}, ratingScale: FALLBACK_SCALE })
-  const [rating, setRating] = useState(0)
-  const [service, setService] = useState(0)
-  const [tags, setTags] = useState([])
-  const [comment, setComment] = useState('')
-  const [productNote, setProductNote] = useState('')
-  const [serviceNote, setServiceNote] = useState('')
-  const [fbSaved, setFbSaved] = useState(false)
-  const [fbDone, setFbDone] = useState(false)
-  const groupOf = (v) => (v <= 2 ? 'tidak_puas' : v === 3 ? 'biasa' : 'puas')
-  const productOpts = rating ? meta.productTagsByGroup[groupOf(rating)] || [] : []
-  const serviceOpts = service ? meta.serviceTagsByGroup[groupOf(service)] || [] : []
+  const meta = useFeedbackMeta()
+  const [serviceDone, setServiceDone] = useState(false)
+  const [tasteDone, setTasteDone] = useState(false)
   const [promoOn, setPromoOn] = useState(false)
   const [profile, setProfile] = useState({ name: '', source: '' })
   const [profileDone, setProfileDone] = useState(false)
@@ -71,9 +59,7 @@ export default function Scan() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  useEffect(() => {
-    api('/api/meta', { device: false }).then((m) => { setMeta(m); setSources(m.sources) }).catch(() => {})
-  }, [])
+  useEffect(() => { if (meta.sources?.length) setSources(meta.sources) }, [meta])
 
   function apply(res) {
     if (res.deviceToken) setDevice(res.deviceToken)
@@ -91,27 +77,6 @@ export default function Scan() {
       setFormErr(e.message)
     } finally { setBusy(false) }
   }
-
-  // Simpan setiap tap (rasa dulu, pelayanan, lalu tag) — "complete" saat keduanya terisi
-  async function sendFeedback(next = {}) {
-    const r = next.rating ?? rating, sv = next.service ?? service, c = next.comment ?? comment
-    let tg = next.tags ?? tags
-    if (next.rating !== undefined || next.service !== undefined) {
-      const ok = new Set([...(r ? meta.productTagsByGroup[groupOf(r)] || [] : []), ...(sv ? meta.serviceTagsByGroup[groupOf(sv)] || [] : [])])
-      tg = tg.filter((t) => ok.has(t))
-    }
-    if (next.rating !== undefined) setRating(r)
-    if (next.service !== undefined) setService(sv)
-    setTags(tg)
-    if (!r) return
-    try {
-      const pn = next.productNote ?? productNote, sn = next.serviceNote ?? serviceNote
-      const d = await api('/api/feedback', { method: 'POST', body: { qrToken: token, stampId: state.res?.stampId, rating: r, service: sv || null, tags: tg, comment: c || null, productNote: pn || null, serviceNote: sn || null } })
-      setFbSaved(true)
-      if (d.complete) setFbDone(true)
-    } catch { /* abaikan; akan dicoba lagi di tap berikutnya */ }
-  }
-  const toggleTag = (t) => sendFeedback({ tags: tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t].slice(0, 4) })
 
   async function togglePromo() {
     const next = !promoOn
@@ -170,7 +135,8 @@ export default function Scan() {
   }
 
   const { res } = state
-  const gate = !!res.feedbackRequired && !fbDone // rating rasa + pelayanan wajib sebelum lanjut
+  const needTaste = !!res.pendingTaste && !tasteDone
+  const gate = (!!res.feedbackRequired && !serviceDone) || needTaste // pelayanan hari ini + rasa kunjungan lalu
   const canRedeem = !gate // sesi outlet aktif karena baru saja scan di sini
   const activeVouchers = res.vouchers.filter((v) => v.status === 'active')
   const otherVouchers = res.vouchers.filter((v) => v.status !== 'active')
@@ -188,19 +154,20 @@ export default function Scan() {
         )}
       </section>
 
-      {res.askFeedback && outlet.feedbackPrompt && (
+      {(res.askFeedback || res.pendingTaste) && outlet.feedbackPrompt && (
         <section className="px-4 mt-6">
-          <div className={`card ${gate ? 'border-brand' : ''}`}>
-            {gate && <div className="text-xs font-bold text-deep mb-2">Isi dua rating ini dulu ya, Kak (10 detik) — voucher langsung bisa dipakai setelahnya.</div>}
-            <RatingRow title="Rasa cimolnya gimana?" value={rating} scale={meta.ratingScale} onPick={(v) => sendFeedback({ rating: v })} />
-            {rating > 0 && <TagRow options={productOpts} tags={tags} onToggle={toggleTag}
-              other={rating <= 2 ? { value: productNote, set: setProductNote, save: () => sendFeedback({ productNote }), placeholder: 'Contoh: cimolnya alot, bumbunya beda' } : null} />}
-            <div className="mt-4" />
-            <RatingRow title="Pelayanan crew-nya?" value={service} scale={meta.ratingScale} onPick={(v) => sendFeedback({ service: v })} />
-            {service > 0 && <TagRow options={serviceOpts} tags={tags} onToggle={toggleTag}
-              other={service <= 2 ? { value: serviceNote, set: setServiceNote, save: () => sendFeedback({ serviceNote }), placeholder: 'Contoh: crew main HP, kembalian kurang' } : null} />}
-            {fbDone && <div className="mt-3 text-sm text-okgreen font-bold">Makasih, Kak! Masukannya nyampe ke tim.</div>}
-            {!fbDone && fbSaved && <div className="mt-2 text-xs text-charcoal/60">Satu lagi ya, Kak.</div>}
+          <div className={`card space-y-5 ${gate ? 'border-brand' : ''}`}>
+            {gate && <div className="text-xs font-bold text-deep">Jawab yang di bawah ini dulu ya, Kak (5 detik) — voucher langsung bisa dipakai setelahnya.</div>}
+            {res.pendingTaste && (
+              <FeedbackBlock kind="taste" stampId={res.pendingTaste.stampId} meta={meta} onDone={() => setTasteDone(true)}
+                title={`Cimol dari ${res.pendingTaste.outletName} ${res.pendingTaste.whenText}, rasanya gimana?`} />
+            )}
+            {res.askFeedback && (
+              <FeedbackBlock kind="service" stampId={res.stampId} meta={meta} onDone={() => setServiceDone(true)} title="Pelayanan crew hari ini gimana?" />
+            )}
+            {!res.pendingTaste && res.askFeedback && (
+              <div className="text-xs text-charcoal/60">Rasa cimolnya kita tanya setelah dimakan ya — pas scan berikutnya atau di halaman “Stamp & voucher saya”.</div>
+            )}
           </div>
         </section>
       )}
@@ -235,7 +202,7 @@ export default function Scan() {
       {activeVouchers.length > 0 && (
         <section className="px-4 mt-6 space-y-3">
           <div className="font-extrabold">Voucher Kakak</div>
-          {activeVouchers.map((v) => <VoucherCard key={v.id} v={v} canRedeem={canRedeem} onRedeem={setRedeem} hint="Isi rating di atas dulu ya, Kak." />)}
+          {activeVouchers.map((v) => <VoucherCard key={v.id} v={v} canRedeem={canRedeem} onRedeem={setRedeem} hint="Jawab pertanyaan di atas dulu ya, Kak." />)}
         </section>
       )}
       {otherVouchers.filter((v) => v.status === 'scheduled' && !(res.isNewMember && res.welcomeVoucher?.id === v.id)).length > 0 && (
@@ -256,39 +223,3 @@ export default function Scan() {
   )
 }
 
-function RatingRow({ title, value, scale, onPick }) {
-  return (
-    <div>
-      <div className="font-bold text-sm">{title}</div>
-      <div className="mt-2 grid grid-cols-5 gap-1">
-        {scale.map((o) => (
-          <button key={o.value} aria-label={`${title} ${o.label} (${o.value} dari 5)`} onClick={() => onPick(o.value)}
-            className={`flex flex-col items-center justify-center min-h-[64px] rounded-xl px-1 ${value === o.value ? 'bg-tint ring-2 ring-brand' : 'bg-white'}`}>
-            <span className="text-2xl leading-none">{o.emoji}</span>
-            <span className="text-[10px] font-bold mt-1 leading-tight text-center">{o.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TagRow({ options, tags, onToggle, other }) {
-  const [open, setOpen] = useState(!!other?.value)
-  const [saved, setSaved] = useState(false)
-  return (
-    <div className="mt-2">
-      <div className="flex flex-wrap gap-2">
-        {options.map((t) => <button key={t} className={`chip min-h-[40px] ${tags.includes(t) ? 'chip-on' : ''}`} onClick={() => onToggle(t)}>{t}</button>)}
-        {other && <button className={`chip min-h-[40px] ${open ? 'chip-on' : ''}`} onClick={() => setOpen(!open)}>Lainnya, tulis sendiri…</button>}
-      </div>
-      {other && open && (
-        <div className="mt-2 flex gap-2">
-          <input className="input" maxLength={140} placeholder={other.placeholder} value={other.value}
-            onChange={(e) => { other.set(e.target.value); setSaved(false) }} onBlur={() => { if (other.value.trim()) { other.save(); setSaved(true) } }} />
-          <button className="btn-ghost" onClick={() => { other.save(); setSaved(true) }}>{saved ? 'Tersimpan' : 'Simpan'}</button>
-        </div>
-      )}
-    </div>
-  )
-}

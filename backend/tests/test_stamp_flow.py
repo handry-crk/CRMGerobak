@@ -156,8 +156,8 @@ async def test_flagged_member_appears_in_summary(client, admin, outlets):
 async def test_feedback_and_profile(client, outlets):
     res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
     h = {"X-Device-Token": res["deviceToken"]}
-    r = await client.post("/api/feedback", json={"qrToken": outlets[0]["qrToken"], "stampId": res["stampId"], "rating": 5, "service": 4, "tags": ["Enak banget", "Crew ramah"]}, headers=h)
-    assert r.status_code == 200 and r.json()["complete"] is True
+    r = await client.post("/api/feedback", json={"stampId": res["stampId"], "service": 4, "tags": ["Crew ramah"]}, headers=h)
+    assert r.status_code == 200 and r.json()["complete"] is True and r.json()["tasteDone"] is False
     r = await client.post("/api/profile", json={"name": "Dina", "source": "Instagram"}, headers=h)
     assert r.status_code == 200 and r.json()["member"]["name"] == "Dina"
     me = await client.get("/api/me", headers=h)
@@ -252,28 +252,38 @@ async def test_phone_formats_unified_to_08_and_name_required(client, outlets):
     assert again.json()["isNewMember"] is False
 
 
-async def test_feedback_required_before_redeem(client, outlets):
+async def test_feedback_two_stage_service_now_taste_next_visit(client, outlets):
     db = dbmod.get_db()
     await db.settings.update_one({"_id": "main"}, {"$set": {"rewardRedeemAfterDays": 0, "minMinutesBetweenStamps": 0}})
-    res = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
-    assert res["feedbackRequired"] is True
-    await db.members.update_one({"_id": res["member"]["id"]}, {"$set": {"stampsActive": 4}})
-    r = await stamp(client, outlets[1]["qrToken"], deviceToken=res["deviceToken"])
-    reward = next(v for v in r["vouchers"] if v["type"] == "stamp_reward")
-    h = {"X-Device-Token": res["deviceToken"]}
+    # Kunjungan 1: hanya pelayanan yang dinilai
+    v1 = await stamp(client, outlets[0]["qrToken"], phone="081234567890", name="Dina")
+    h = {"X-Device-Token": v1["deviceToken"]}
+    assert v1["feedbackRequired"] is True and v1["pendingTaste"] is None
+    await client.post("/api/feedback", json={"stampId": v1["stampId"], "service": 5, "tags": ["Crew ramah"]}, headers=h)
+    # Kunjungan 2: rasa kunjungan 1 ditanya
+    await db.members.update_one({"_id": v1["member"]["id"]}, {"$set": {"stampsActive": 4}})
+    v2 = await stamp(client, outlets[1]["qrToken"], deviceToken=v1["deviceToken"])
+    assert v2["pendingTaste"]["stampId"] == v1["stampId"] and v2["pendingTaste"]["outletName"] == outlets[0]["name"]
+    reward = next(v for v in v2["vouchers"] if v["type"] == "stamp_reward")
     body = {"qrToken": outlets[1]["qrToken"]}
-    blocked = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
-    assert blocked.status_code == 409 and blocked.json()["detail"]["code"] == "need_feedback"
-    # rating rasa saja belum cukup
-    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4}, headers=h)
-    still = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
-    assert still.status_code == 409
-    await client.post("/api/feedback", json={"qrToken": outlets[1]["qrToken"], "stampId": r["stampId"], "rating": 4, "service": 2, "tags": ["Antre lama", "Kurang panas", "Cepat dilayani"], "serviceNote": "crew main hp", "productNote": "diabaikan karena rasa puas"}, headers=h)  # 2 tag terakhir tak cocok kelompok → dibuang
+    # Belum isi pelayanan hari ini → ditolak
+    r = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "need_feedback"
+    await client.post("/api/feedback", json={"stampId": v2["stampId"], "service": 2, "tags": ["Antre lama"], "serviceNote": "crew main hp"}, headers=h)
+    # Pelayanan sudah, rasa kunjungan 1 belum → ditolak
+    r = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "need_taste"
+    r = await client.post("/api/feedback", json={"stampId": v1["stampId"], "rating": 4, "tags": ["Enak banget", "Kurang panas", "Crew ramah"]}, headers=h)
+    assert r.json()["tasteDone"] is True
     ok = await client.post(f"/api/voucher/{reward['id']}/redeem", json=body, headers=h)
     assert ok.status_code == 200
-    fb = await db.feedback.find_one({"stampId": r["stampId"]})
-    assert fb["ratingGroup"] == "puas" and fb["serviceGroup"] == "tidak_puas" and fb["tags"] == ["Antre lama"]
-    assert fb["serviceNote"] == "crew main hp" and fb["productNote"] is None and fb["comment"] == "Pelayanan: crew main hp"
+    fb1 = await db.feedback.find_one({"stampId": v1["stampId"]})
+    assert fb1["rating"] == 4 and fb1["service"] == 5 and fb1["ratingGroup"] == "puas" and fb1["tags"] == ["Enak banget", "Crew ramah"]
+    fb2 = await db.feedback.find_one({"stampId": v2["stampId"]})
+    assert fb2["service"] == 2 and fb2["rating"] is None and fb2["comment"] == "Pelayanan: crew main hp"
+    # /saya menunjukkan rasa kunjungan 2 masih tertunda
+    me = (await client.get("/api/me", headers=h)).json()
+    assert me["pendingTaste"]["stampId"] == v2["stampId"]
 
 
 async def test_concurrent_double_scan_grants_once(client, outlets):
