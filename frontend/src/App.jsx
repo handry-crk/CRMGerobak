@@ -1,5 +1,12 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+
+// Alamat utama: browser yang pernah login admin diarahkan ke dashboard, lainnya ke halaman customer
+function Home() {
+  let isAdmin = false
+  try { isAdmin = !!localStorage.getItem('sb_admin') } catch { /* ignore */ }
+  return <Navigate to={isAdmin ? '/admin' : '/saya'} replace />
+}
 import Scan from './pages/Scan.jsx'
 import Me from './pages/Me.jsx'
 
@@ -19,7 +26,7 @@ export default function App() {
           </Suspense>
         }
       />
-      <Route path="/" element={<Navigate to="/saya" replace />} />
+      <Route path="/" element={<Home />} />
       <Route path="*" element={<Navigate to="/saya" replace />} />
     </Routes>
   )
