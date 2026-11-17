@@ -376,3 +376,33 @@ async def test_campaign_max_issue_and_specific_numbers_and_wipe(client, admin, o
     assert ok.status_code == 200 and ok.json()["removed"]["members"] == 3
     assert await db.members.count_documents({}) == 0 and await db.vouchers.count_documents({}) == 0
     assert await db.outlets.count_documents({}) == 5 and await db.admin_users.count_documents({}) >= 1
+
+
+async def test_campaign_revoke_delete_and_void(client, admin, outlets):
+    db = dbmod.get_db()
+    await db.settings.update_one({"_id": "main"}, {"$set": {"feedbackRequired": False}})
+    r1 = await stamp(client, outlets[0]["qrToken"], phone="081200000001", name="A")
+    await stamp(client, outlets[0]["qrToken"], phone="081200000002", name="B")
+    base = {"title": "Tes", "valueRp": 1000, "validFrom": today_wib(), "validTo": add_days(today_wib(), 7), "segment": "semua"}
+    c1 = (await client.post("/api/admin/campaigns", json={**base, "code": "C1"}, headers=admin)).json()
+    # member A menukar voucher C1
+    v = await db.vouchers.find_one({"campaignCode": "C1", "memberId": r1["member"]["id"]})
+    ok = await client.post(f"/api/voucher/{v['_id']}/redeem", json={"qrToken": outlets[0]["qrToken"]}, headers={"X-Device-Token": r1["deviceToken"]})
+    assert ok.status_code == 200
+    # hapus ditolak karena ada yang ditukar → tarik
+    d = await client.delete(f"/api/admin/campaigns/{c1['id']}?reason=salah", headers=admin)
+    assert d.status_code == 409
+    rv = await client.post(f"/api/admin/campaigns/{c1['id']}/revoke", json={"reason": "salah nominal"}, headers=admin)
+    assert rv.status_code == 200 and rv.json()["revoked"] == 1
+    assert await db.vouchers.count_documents({"campaignCode": "C1", "status": "used"}) == 1
+    assert await db.vouchers.count_documents({"campaignCode": "C1", "status": "expired"}) == 1
+    # campaign tanpa penukaran → boleh dihapus total
+    c2 = (await client.post("/api/admin/campaigns", json={**base, "code": "C2"}, headers=admin)).json()
+    d = await client.delete(f"/api/admin/campaigns/{c2['id']}?reason=batal", headers=admin)
+    assert d.status_code == 200 and d.json()["deleted"] == 2
+    assert await db.campaigns.find_one({"code": "C2"}) is None
+    # void satu voucher (Balik Lagi member B)
+    vb = await db.vouchers.find_one({"type": "balik_lagi", "memberId": {"$ne": r1["member"]["id"]}})
+    assert (await client.post(f"/api/admin/vouchers/{vb['_id']}/void", json={"reason": "salah terbit"}, headers=admin)).status_code == 200
+    assert (await db.vouchers.find_one({"_id": vb["_id"]}))["status"] == "expired"
+    assert (await client.post(f"/api/admin/vouchers/{v['_id']}/void", json={"reason": "x"}, headers=admin)).status_code == 409

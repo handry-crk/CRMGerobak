@@ -461,6 +461,7 @@ async def voucher_stats(user: dict = Depends(current_admin), db: AsyncIOMotorDat
     for c in campaigns:
         c["id"] = c.pop("_id")
         c["used"] = await db.vouchers.count_documents({"campaignCode": c["code"], "status": "used"})
+        c["activeLeft"] = await db.vouchers.count_documents({"campaignCode": c["code"], "status": {"$in": ["active", "scheduled"]}})
     return {"byType": out, "campaigns": campaigns}
 
 
@@ -507,6 +508,49 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: Asyn
     await audit(db, user, "campaign.create", camp["_id"], {"code": code, "issued": n, "segment": body.segment})
     camp["id"] = camp.pop("_id")
     return camp
+
+
+@router.post("/campaigns/{campaign_id}/revoke")
+async def revoke_campaign(campaign_id: str, body: ReasonIn, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Tarik campaign: voucher yang belum dipakai (aktif/terjadwal) dihanguskan; yang sudah ditukar tetap tercatat."""
+    camp = await db.campaigns.find_one({"_id": campaign_id})
+    if not camp:
+        raise HTTPException(404, {"code": "not_found", "message": "Campaign tidak ditemukan."})
+    res = await db.vouchers.update_many(
+        {"campaignCode": camp["code"], "status": {"$in": ["active", "scheduled"]}},
+        {"$set": {"status": "expired", "revokedAt": iso(now_utc()), "revokedBy": user["name"], "note": body.reason}},
+    )
+    await db.campaigns.update_one({"_id": campaign_id}, {"$set": {"revokedAt": iso(now_utc()), "revokedBy": user["name"], "revokeReason": body.reason}})
+    await audit(db, user, "campaign.revoke", campaign_id, {"code": camp["code"], "revoked": res.modified_count, "reason": body.reason})
+    return {"ok": True, "revoked": res.modified_count}
+
+
+@router.delete("/campaigns/{campaign_id}")
+async def delete_campaign(campaign_id: str, reason: str = Query(min_length=3), user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Hapus campaign beserta vouchernya — hanya bila belum ada yang ditukar (jejak penukaran tidak boleh hilang)."""
+    camp = await db.campaigns.find_one({"_id": campaign_id})
+    if not camp:
+        raise HTTPException(404, {"code": "not_found", "message": "Campaign tidak ditemukan."})
+    used = await db.vouchers.count_documents({"campaignCode": camp["code"], "status": "used"})
+    if used:
+        raise HTTPException(409, {"code": "has_used", "message": f"{used} voucher sudah ditukar — gunakan 'Tarik' agar riwayat penukaran tetap ada."})
+    res = await db.vouchers.delete_many({"campaignCode": camp["code"]})
+    await db.campaigns.delete_one({"_id": campaign_id})
+    await audit(db, user, "campaign.delete", campaign_id, {"code": camp["code"], "deleted": res.deleted_count, "reason": reason})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@router.post("/vouchers/{voucher_id}/void")
+async def void_voucher(voucher_id: str, body: ReasonIn, user: dict = Depends(LEAD), db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Hanguskan satu voucher member (mis. salah terbit). Voucher yang sudah ditukar tidak bisa dihanguskan."""
+    v = await db.vouchers.find_one({"_id": voucher_id})
+    if not v:
+        raise HTTPException(404, {"code": "not_found", "message": "Voucher tidak ditemukan."})
+    if v["status"] == "used":
+        raise HTTPException(409, {"code": "used", "message": "Voucher sudah ditukar, tidak bisa dihanguskan."})
+    await db.vouchers.update_one({"_id": voucher_id}, {"$set": {"status": "expired", "revokedAt": iso(now_utc()), "revokedBy": user["name"], "note": body.reason}})
+    await audit(db, user, "voucher.void", voucher_id, {"memberId": v["memberId"], "title": v["title"], "reason": body.reason})
+    return {"ok": True}
 
 
 class WipeIn(BaseModel):

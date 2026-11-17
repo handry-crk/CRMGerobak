@@ -21,6 +21,17 @@ export default function Vouchers({ ctx }) {
     } catch (e) { ctx.notify(e.message) }
   }
 
+  async function revoke(c) {
+    const reason = prompt(`Tarik campaign ${c.code}? ${c.activeLeft} voucher yang belum dipakai akan hangus; ${c.used} yang sudah ditukar tetap tercatat.\nAlasan (masuk audit log):`)
+    if (!reason || reason.length < 3) return
+    try { const r = await adminApi(`/api/admin/campaigns/${c.id}/revoke`, { method: 'POST', body: { reason } }); ctx.notify(`${r.revoked} voucher dihanguskan`); load() } catch (e) { ctx.notify(e.message) }
+  }
+  async function remove(c) {
+    const reason = prompt(`Hapus campaign ${c.code} beserta ${c.issued} vouchernya? Hanya bisa bila belum ada yang ditukar.\nAlasan:`)
+    if (!reason || reason.length < 3) return
+    try { await adminApi(`/api/admin/campaigns/${c.id}?reason=${encodeURIComponent(reason)}`, { method: 'DELETE' }); ctx.notify('Campaign dihapus'); load() } catch (e) { ctx.notify(e.message) }
+  }
+
   if (!stats) return <div className="text-sm">Memuat…</div>
   const types = Object.entries(stats.byType)
   return (
@@ -57,6 +68,11 @@ export default function Vouchers({ ctx }) {
           { key: 'segment', label: 'Segmen', render: (c) => c.segment + (c.area ? ` (${c.area})` : '') + (c.segment === 'minVisits' ? ` (≥${c.minVisits})` : '') + (c.maxIssue ? ` · maks ${c.maxIssue}` : '') },
           { key: 'validFrom', label: 'Berlaku', render: (c) => `${c.validFrom} – ${c.validTo}` },
           { key: 'issued', label: 'Terbit', align: 'right' }, { key: 'used', label: 'Ditukar', align: 'right' },
+          { key: 'activeLeft', label: 'Masih aktif', align: 'right', render: (c) => (c.revokedAt ? <span className="text-charcoal/50">ditarik</span> : c.activeLeft) },
+          { key: 'act', label: '', render: (c) => ctx.privileged && !c.revokedAt && <span className="flex gap-2">
+            {c.activeLeft > 0 && <button className="underline text-deep" onClick={() => revoke(c)}>Tarik</button>}
+            {c.used === 0 && <button className="underline text-brand" onClick={() => remove(c)}>Hapus</button>}
+          </span> },
         ]}
         rows={stats.campaigns}
         empty="Belum ada campaign"

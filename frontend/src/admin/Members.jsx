@@ -71,7 +71,10 @@ export default function Members({ ctx }) {
                 {detail.stamps.map((s, i) => <div key={i} className="border-b border-line py-1 flex justify-between gap-2"><span>{fmtTanggal(s.at)} · {s.outlet}</span><span className={s.granted ? 'text-okgreen' : 'text-charcoal/50'}>{s.granted ? '✓' : s.reason}{s.flags?.length ? ` · ${s.flags.join(',')}` : ''}{s.promoCode ? ` · ${s.promoCode}` : ''}</span></div>)}
               </div>
               <div><div className="font-bold mb-1">Voucher</div>
-                {detail.vouchers.map((v) => <div key={v.id} className="border-b border-line py-1 flex justify-between gap-2"><span>{v.title}</span><span className="text-charcoal/60">{v.status}{v.usedOutletName ? ` · ${v.usedOutletName}` : ''}</span></div>)}
+                {detail.vouchers.map((v) => <div key={v.id} className="border-b border-line py-1 flex justify-between gap-2"><span>{v.title}</span>
+                  <span className="text-charcoal/60 flex gap-2">{v.status}{v.usedOutletName ? ` · ${v.usedOutletName}` : ''}
+                    {ctx.lead && ['active', 'scheduled'].includes(v.status) && <button className="underline text-brand" onClick={() => act(`/api/admin/vouchers/${v.id}/void`, {})}>Hanguskan</button>}
+                  </span></div>)}
                 {detail.vouchers.length === 0 && <div className="text-charcoal/60">Belum ada.</div>}
                 <div className="font-bold mt-3 mb-1">Feedback</div>
                 {detail.feedback.map((f, i) => <div key={i} className="border-b border-line py-1">{'★'.repeat(f.rating)} {f.outlet} {f.tag || ''} {f.comment ? `— “${f.comment}”` : ''}</div>)}
