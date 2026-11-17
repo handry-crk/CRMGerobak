@@ -79,7 +79,8 @@ async def admin_login(db: AsyncIOMotorDatabase, name: str, pin: str) -> dict:
 
 
 def admin_public(u: dict) -> dict:
-    return {"id": u["_id"], "name": u["name"], "role": u["role"], "areas": u.get("areas", []), "active": u.get("active", True)}
+    return {"id": u["_id"], "name": u["name"], "role": u["role"], "areas": u.get("areas", []), "active": u.get("active", True),
+            "mustChangePin": bool(u.get("mustChangePin"))}
 
 
 async def current_admin(

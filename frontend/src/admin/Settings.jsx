@@ -10,8 +10,11 @@ export default function Settings({ ctx }) {
   const [u, setU] = useState(null)
   const [audit, setAudit] = useState([])
   const [jobOut, setJobOut] = useState('')
+  const [tempPin, setTempPin] = useState(null)
+  const [myPin, setMyPin] = useState({ oldPin: '', newPin: '' })
 
   const load = () => {
+    if (!ctx.privileged) { setS({}); return }
     adminApi('/api/admin/settings').then(setS).catch((e) => ctx.notify(e.message))
     adminApi('/api/admin/users').then(setUsers).catch(() => {})
     adminApi('/api/admin/audit').then(setAudit).catch(() => {})
@@ -35,6 +38,16 @@ export default function Settings({ ctx }) {
     } catch (e) { ctx.notify(e.message) }
   }
 
+  async function resetPin(x) {
+    if (!confirm(`Reset PIN ${x.name}? PIN lama tidak berlaku lagi dan sesi loginnya ditutup.`)) return
+    try { const r = await adminApi(`/api/admin/users/${x.id}/reset-pin`, { method: 'POST' }); setTempPin(r); load() } catch (e) { ctx.notify(e.message) }
+  }
+
+  async function changeMyPin(e) {
+    e.preventDefault()
+    try { await adminApi('/api/admin/me/pin', { method: 'POST', body: myPin }); ctx.notify('PIN kamu diganti'); setMyPin({ oldPin: '', newPin: '' }) } catch (e) { ctx.notify(e.message) }
+  }
+
   async function runJob(j) {
     try { const r = await adminApi(`/api/admin/jobs/${j}/run`, { method: 'POST' }); setJobOut(JSON.stringify(r)); ctx.notify(`Job ${j} dijalankan`) } catch (e) { ctx.notify(e.message) }
   }
@@ -44,6 +57,17 @@ export default function Settings({ ctx }) {
   }
 
   if (!s) return <div className="text-sm">Memuat…</div>
+  if (!ctx.privileged) {
+    return (
+      <form onSubmit={changeMyPin} className="card space-y-3 max-w-xl">
+        <div className="font-extrabold">Ganti PIN saya ({ctx.user.name})</div>
+        {ctx.user.mustChangePin && <div className="text-sm text-brand font-bold">PIN kamu masih PIN sementara dari Manager — ganti sekarang ya.</div>}
+        <Field label="PIN lama"><input className="input" type="password" inputMode="numeric" maxLength={6} required value={myPin.oldPin} onChange={(e) => setMyPin({ ...myPin, oldPin: e.target.value })} /></Field>
+        <Field label="PIN baru (4–6 angka)"><input className="input" type="password" inputMode="numeric" maxLength={6} required value={myPin.newPin} onChange={(e) => setMyPin({ ...myPin, newPin: e.target.value })} /></Field>
+        <button className="btn-primary">Simpan PIN baru</button>
+      </form>
+    )
+  }
   const ro = !ctx.lead
   const set = (k) => (e) => setS({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const setW = (k) => (e) => setS({ ...s, welcomeVoucher: { ...s.welcomeVoucher, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value } })
@@ -90,10 +114,21 @@ export default function Settings({ ctx }) {
         {!ro && <button className="btn-primary">Simpan pengaturan</button>}
       </form>
 
+      <form onSubmit={changeMyPin} className="card space-y-3">
+        <div className="font-extrabold">Ganti PIN saya ({ctx.user.name})</div>
+        {ctx.user.mustChangePin && <div className="text-sm text-brand font-bold">PIN kamu masih PIN sementara dari Manager — ganti sekarang ya.</div>}
+        <div className="grid md:grid-cols-3 gap-3 items-end">
+          <Field label="PIN lama"><input className="input" type="password" inputMode="numeric" maxLength={6} required value={myPin.oldPin} onChange={(e) => setMyPin({ ...myPin, oldPin: e.target.value })} /></Field>
+          <Field label="PIN baru (4–6 angka)"><input className="input" type="password" inputMode="numeric" maxLength={6} required value={myPin.newPin} onChange={(e) => setMyPin({ ...myPin, newPin: e.target.value })} /></Field>
+          <button className="btn-primary">Simpan PIN baru</button>
+        </div>
+      </form>
+
       <div className="card space-y-3">
         <div className="font-extrabold">Admin</div>
         <Table cols={[{ key: 'name', label: 'Nama' }, { key: 'role', label: 'Role' }, { key: 'areas', label: 'Area', render: (x) => x.areas?.join(', ') || '–' }, { key: 'email', label: 'Email' }, { key: 'active', label: 'Status', render: (x) => (x.active ? 'Aktif' : 'Nonaktif') },
-          { key: 'act', label: '', render: (x) => ctx.manager && <span className="flex gap-2"><button className="underline text-deep" onClick={() => setU({ ...x, pin: '' })}>Edit / reset PIN</button>
+          { key: 'act', label: '', render: (x) => ctx.manager && <span className="flex gap-2 flex-wrap"><button className="underline text-deep" onClick={() => setU({ ...x, pin: '' })}>Edit</button>
+            <button className="underline text-deep" onClick={() => resetPin(x)}>Reset PIN</button>
             {x.id !== ctx.user.id && <button className="underline text-brand" onClick={async () => { await adminApi(`/api/admin/users/${x.id}/toggle-active`, { method: 'POST' }); load() }}>{x.active ? 'Nonaktifkan' : 'Aktifkan'}</button>}</span> }]} rows={users} />
         {ctx.manager && <button className="btn-ghost" onClick={() => setU({ name: '', role: 'Viewer', areas: [], pin: '', email: '' })}>+ Admin</button>}
         {!ctx.manager && <p className="text-xs text-charcoal/60">Hanya Manager yang bisa menambah/mengubah akun admin.</p>}
@@ -115,6 +150,20 @@ export default function Settings({ ctx }) {
         <Table cols={[{ key: 'at', label: 'Waktu' }, { key: 'who', label: 'Siapa' }, { key: 'action', label: 'Aksi' }, { key: 'target', label: 'Target' }, { key: 'detail', label: 'Detail', render: (a) => JSON.stringify(a.detail) }]} rows={audit} />
       </div>
 
+      {tempPin && (
+        <div className="fixed inset-0 bg-black/40 z-40 grid place-items-center p-4" onClick={() => setTempPin(null)}>
+          <div className="card w-full max-w-sm text-center space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="font-extrabold">PIN sementara untuk {tempPin.name}</div>
+            <div className="text-4xl font-extrabold tracking-[0.3em] text-brand">{tempPin.pin}</div>
+            <p className="text-sm text-charcoal/70">Kirim ke orangnya lewat jalur pribadi. PIN ini hanya ditampilkan sekali; dia akan diminta menggantinya di menu Pengaturan → Ganti PIN saya.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="btn-ghost" onClick={() => { navigator.clipboard?.writeText(tempPin.pin); ctx.notify('PIN disalin') }}>Salin</button>
+              <button className="btn-primary" onClick={() => setTempPin(null)}>Selesai</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {u && (
         <div className="fixed inset-0 bg-black/40 z-40 grid place-items-center p-4" onClick={() => setU(null)}>
           <form className="card w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()} onSubmit={saveUser}>
@@ -124,7 +173,7 @@ export default function Settings({ ctx }) {
             {u.role === 'Area' && u.areas.length === 0 && <div className="text-xs text-brand font-bold">Role Area wajib memilih minimal satu area.</div>}
             {u.role === 'Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{ctx.meta.areas.map((a) => <button type="button" key={a} className={`chip ${u.areas.includes(a) ? 'chip-on' : ''}`} onClick={() => setU({ ...u, areas: u.areas.includes(a) ? u.areas.filter((x) => x !== a) : [...u.areas, a] })}>{a}</button>)}</div></Field>}
             <Field label="Email (untuk digest)"><input className="input" value={u.email || ''} onChange={(e) => setU({ ...u, email: e.target.value })} /></Field>
-            <Field label={u.id ? 'PIN baru (kosongkan bila tidak diganti)' : 'PIN (4–6 angka)'}><input className="input" inputMode="numeric" maxLength={6} value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value })} /></Field>
+            <Field label={u.id ? 'PIN baru (kosongkan bila tidak diganti)' : 'PIN awal (4–6 angka)'}><input className="input" inputMode="numeric" maxLength={6} required={!u.id} value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value })} /></Field>
             <div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost" onClick={() => setU(null)}>Batal</button><button className="btn-primary" disabled={u.role === 'Area' && u.areas.length === 0}>Simpan</button></div>
           </form>
         </div>

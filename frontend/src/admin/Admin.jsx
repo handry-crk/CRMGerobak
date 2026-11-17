@@ -76,11 +76,12 @@ export default function Admin() {
             <button className="underline mt-0.5" onClick={() => { setAdmin(null); setUser(null) }}>Keluar</button></div>
         </div>
         <nav className="max-w-6xl mx-auto px-2 flex gap-1 overflow-x-auto no-scrollbar">
-          {NAV.filter(([p]) => p !== 'pengaturan' || privileged).map(([p, label]) => (
+          {NAV.map(([p, label]) => (
             <NavLink key={p} to={`/admin/${p}`} end={p === ''} className={({ isActive }) => `whitespace-nowrap px-3 py-2 text-sm font-bold rounded-t-lg ${isActive ? 'bg-white text-brand' : 'text-white/90'}`}>{label}</NavLink>
           ))}
         </nav>
       </header>
+      {user.mustChangePin && <div className="bg-tint text-deep text-sm font-bold text-center py-2">PIN kamu masih PIN sementara — ganti di Pengaturan → Ganti PIN saya.</div>}
       <main className="max-w-6xl mx-auto p-4">
         <Routes>
           <Route index element={<Ringkasan ctx={ctx} />} />
@@ -89,7 +90,7 @@ export default function Admin() {
           <Route path="voucher" element={<Vouchers ctx={ctx} />} />
           <Route path="rating" element={<Rating ctx={ctx} />} />
           <Route path="antifraud" element={<AntiFraud ctx={ctx} />} />
-          <Route path="pengaturan" element={privileged ? <Settings ctx={ctx} /> : <Navigate to="/admin" replace />} />
+          <Route path="pengaturan" element={<Settings ctx={ctx} />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </main>

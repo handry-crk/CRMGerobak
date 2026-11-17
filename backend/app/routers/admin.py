@@ -577,8 +577,12 @@ async def create_user(body: AdminUserIn, user: dict = Depends(MGR), db: AsyncIOM
         raise HTTPException(422, {"code": "bad_role", "message": "Role tidak dikenal."})
     if await db.admin_users.find_one({"name": body.name}):
         raise HTTPException(409, {"code": "dup", "message": "Nama sudah dipakai."})
+    if not body.pin:
+        raise HTTPException(422, {"code": "pin_required", "message": "PIN wajib diisi (4–6 angka)."})
+    if body.role == "Area" and not body.areas:
+        raise HTTPException(422, {"code": "area_required", "message": "Role Area wajib memilih minimal satu area."})
     doc = {"_id": new_id("adm"), "name": body.name, "role": body.role, "areas": body.areas, "email": body.email,
-           "pinHash": new_pin_hash(body.pin or "1234"), "active": True, "failedAttempts": 0, "lockedUntil": None, "createdAt": iso(now_utc())}
+           "pinHash": new_pin_hash(body.pin), "active": True, "failedAttempts": 0, "lockedUntil": None, "createdAt": iso(now_utc())}
     await db.admin_users.insert_one(doc)
     await audit(db, user, "user.create", doc["_id"], {"name": body.name, "role": body.role})
     return admin_public(doc)
@@ -598,6 +602,37 @@ async def update_user(user_id: str, body: AdminUserIn, user: dict = Depends(MGR)
         raise HTTPException(404, {"code": "not_found", "message": "User tidak ditemukan."})
     await audit(db, user, "user.update", user_id, {"role": body.role, "pinReset": bool(body.pin)})
     return admin_public(await db.admin_users.find_one({"_id": user_id}))
+
+
+@router.post("/users/{user_id}/reset-pin")
+async def reset_user_pin(user_id: str, user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Manager membuat PIN sementara 6 angka untuk anggota tim; PIN hanya ditampilkan sekali di respons ini."""
+    import secrets
+    u = await db.admin_users.find_one({"_id": user_id})
+    if not u:
+        raise HTTPException(404, {"code": "not_found", "message": "User tidak ditemukan."})
+    pin = "".join(secrets.choice("0123456789") for _ in range(6))
+    await db.admin_users.update_one({"_id": user_id}, {"$set": {"pinHash": new_pin_hash(pin), "failedAttempts": 0, "lockedUntil": None, "mustChangePin": True}})
+    await db.admin_sessions.delete_many({"userId": user_id})  # sesi lama user tsb ditutup
+    await audit(db, user, "user.reset_pin", user_id, {"name": u["name"]})
+    return {"ok": True, "name": u["name"], "pin": pin}
+
+
+class ChangePinIn(BaseModel):
+    oldPin: str
+    newPin: str
+
+
+@router.post("/me/pin")
+async def change_my_pin(body: ChangePinIn, user: dict = Depends(current_admin), db: AsyncIOMotorDatabase = Depends(get_db)):
+    from ..utils import verify_pin
+    if not verify_pin(body.oldPin.strip(), user["pinHash"]):
+        raise HTTPException(401, {"code": "bad_pin", "message": "PIN lama salah."})
+    if body.newPin.strip() == body.oldPin.strip():
+        raise HTTPException(422, {"code": "same_pin", "message": "PIN baru harus berbeda."})
+    await db.admin_users.update_one({"_id": user["_id"]}, {"$set": {"pinHash": new_pin_hash(body.newPin.strip()), "mustChangePin": False}})
+    await audit(db, user, "user.change_own_pin", user["_id"])
+    return {"ok": True}
 
 
 @router.post("/users/{user_id}/toggle-active")

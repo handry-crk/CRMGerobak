@@ -319,3 +319,32 @@ async def test_manager_full_access_crm_lead_operational(client, admin, outlets):
     # CRM Lead: tidak boleh kelola admin & job
     assert (await client.post("/api/admin/users", json={"name": "X", "role": "Viewer", "pin": "1111"}, headers=lead)).status_code == 403
     assert (await client.post("/api/admin/jobs/backup/run", headers=lead)).status_code == 403
+
+
+async def test_reset_pin_and_change_own_pin(client, admin):
+    r = await client.post("/api/admin/users", json={"name": "Rani", "role": "Viewer", "pin": "5555"}, headers=admin)
+    uid = r.json()["id"]
+    # kunci akun Rani dulu
+    for _ in range(5):
+        await client.post("/api/admin/login", json={"name": "Rani", "pin": "0000"})
+    assert (await client.post("/api/admin/login", json={"name": "Rani", "pin": "5555"})).status_code == 423
+    # Manager reset → PIN sementara, kunci terbuka
+    r = await client.post(f"/api/admin/users/{uid}/reset-pin", headers=admin)
+    assert r.status_code == 200 and len(r.json()["pin"]) == 6
+    temp = r.json()["pin"]
+    login = await client.post("/api/admin/login", json={"name": "Rani", "pin": temp})
+    assert login.status_code == 200 and login.json()["user"]["mustChangePin"] is True
+    rh = {"Authorization": f"Bearer {login.json()['token']}"}
+    # Rani ganti PIN sendiri
+    assert (await client.post("/api/admin/me/pin", json={"oldPin": "9999", "newPin": "1212"}, headers=rh)).status_code == 401
+    assert (await client.post("/api/admin/me/pin", json={"oldPin": temp, "newPin": "1212"}, headers=rh)).status_code == 200
+    assert (await client.post("/api/admin/login", json={"name": "Rani", "pin": "1212"})).status_code == 200
+    # Viewer tidak boleh reset PIN orang lain
+    assert (await client.post(f"/api/admin/users/{uid}/reset-pin", headers=rh)).status_code == 403
+
+
+async def test_create_user_requires_pin(client, admin):
+    r = await client.post("/api/admin/users", json={"name": "Tanpa PIN", "role": "Viewer"}, headers=admin)
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "pin_required"
+    r = await client.post("/api/admin/users", json={"name": "Area Kosong", "role": "Area", "pin": "1111"}, headers=admin)
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "area_required"

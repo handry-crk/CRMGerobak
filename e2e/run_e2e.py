@@ -33,7 +33,7 @@ async def step(name, coro):
         await coro
         record(name, True)
     except Exception as e:  # noqa: BLE001
-        record(name, False, str(e).splitlines()[0][:160])
+        record(name, False, " | ".join(str(e).splitlines()[:3])[:400])
         pg = CURRENT_PAGE.get("admin")
         if pg is not None:
             try:  # tutup modal/overlay yang mungkin tertinggal agar langkah berikutnya tidak terdampak
@@ -93,11 +93,11 @@ async def main(base: str, chrome: str, shots: str):
         async def t_users():
             for name, role, pin, area in [("Lead CRM", "CRM Lead", "2222", None), ("Area Bdg", "Area", "3333", "Bandung"), ("Viewer", "Viewer", "4444", None)]:
                 await ad.click('button:has-text("+ Admin")')
-                await ad.fill('label:has-text("Nama") input', name)
+                await ad.fill('form label:has-text("Nama") >> nth=-1 >> input', name) if False else await ad.locator('label:has-text("Nama") input').last.fill(name)
                 await ad.select_option('label:has-text("Role") select', role)
                 if area:
                     await ad.click(f'form button:has-text("{area}")')
-                await ad.fill('label:has-text("PIN") input', pin)
+                await ad.fill('label:has-text("PIN awal") input', pin)
                 await ad.click('button:text-is("Simpan")')
                 await ad.wait_for_selector("text=User tersimpan")
                 await ad.wait_for_timeout(300)
@@ -301,9 +301,32 @@ async def main(base: str, chrome: str, shots: str):
             await admin_login("Viewer", "4444")
             await ad.click('a:has-text("Member")')
             await ad.wait_for_selector("text=****")
-            assert await ad.locator('a:has-text("Pengaturan")').count() == 0
             assert await ad.locator('button:has-text("Ekspor CSV")').count() == 0
-        await step("Admin (Viewer): nomor dimasker, tanpa Pengaturan & ekspor", t_viewer_role())
+            await ad.click('a:has-text("Pengaturan")')
+            await ad.wait_for_selector("text=Ganti PIN saya")
+            assert await ad.locator("text=Program stamp").count() == 0
+        await step("Admin (Viewer): nomor dimasker, tanpa ekspor, Pengaturan hanya Ganti PIN saya", t_viewer_role())
+
+        async def t_reset_pin():
+            await admin_logout()
+            await admin_login("Admin", "1234")
+            await ad.click('a:has-text("Pengaturan")')
+            await ad.wait_for_selector("text=Program stamp")
+            ad.once("dialog", lambda d: asyncio.ensure_future(d.accept()))
+            await ad.locator('tr:has-text("Viewer") button:has-text("Reset PIN")').click()
+            await ad.wait_for_selector("text=PIN sementara untuk Viewer")
+            pin = (await ad.locator("div.tracking-\\[0\\.3em\\]").inner_text()).strip()
+            assert len(pin) == 6, pin
+            await ad.click('button:has-text("Selesai")')
+            await admin_logout()
+            await admin_login("Viewer", pin)
+            await ad.wait_for_selector("text=PIN sementara")
+            await ad.click('a:has-text("Pengaturan")')
+            await ad.fill('label:has-text("PIN lama") input', pin)
+            await ad.fill('label:has-text("PIN baru") input', "7777")
+            await ad.click('button:has-text("Simpan PIN baru")')
+            await ad.wait_for_selector("text=PIN kamu diganti")
+        await step("Admin: Manager reset PIN Viewer → login PIN sementara → Viewer ganti PIN sendiri", t_reset_pin())
 
         async def t_area_role():
             await admin_logout()
@@ -325,7 +348,7 @@ async def main(base: str, chrome: str, shots: str):
         async def t_pin_lock():
             await admin_logout()
             for _ in range(5):
-                await ad.select_option("select", "Viewer")
+                await ad.select_option("select", "Area Bdg")
                 await ad.fill("input[type=password]", "0000")
                 await ad.click('button:has-text("Masuk")')
                 await ad.wait_for_timeout(250)

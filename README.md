@@ -76,9 +76,9 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 24 skenario acceptance API (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 26 skenario acceptance API (mongomock, tanpa server Mongo)
 ```
-End-to-end lewat browser sungguhan (24 skenario admin + customer, butuh Chrome & `pip install playwright`):
+End-to-end lewat browser sungguhan (25 skenario admin + customer, butuh Chrome & `pip install playwright`):
 ```bash
 cd frontend && npm run build && cd ../backend
 USE_MOCK_DB=true ENABLE_SCHEDULER=false RATE_LIMIT_IP_PER_MIN=100000 RATE_LIMIT_PHONE_PER_MIN=100000 uvicorn app.main:app --port 8000 &
