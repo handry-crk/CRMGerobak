@@ -171,7 +171,7 @@ export default function Scan() {
         </section>
       )}
 
-      {res.askFeedback && outlet.feedbackPrompt && (
+      {res.askFeedback && outlet.feedbackPrompt && !pr && (
         <section className="px-4 mt-4">
           <div className="card">
             <FeedbackBlock kind="service" stampId={res.stampId} meta={meta} title="Udah dilayani? Pelayanan crew hari ini gimana?" />

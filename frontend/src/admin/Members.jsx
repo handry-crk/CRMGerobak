@@ -9,6 +9,7 @@ export default function Members({ ctx }) {
   const [data, setData] = useState({ items: [], total: 0 })
   const [detail, setDetail] = useState(null)
   const [reason, setReason] = useState('')
+  const [mv, setMv] = useState(null) // form voucher manual
 
   const load = () => adminApi(`/api/admin/members?q=${encodeURIComponent(q)}&page=${page}`).then(setData).catch((e) => ctx.notify(e.message))
   useEffect(() => { load() }, [q, page])
@@ -60,11 +61,23 @@ export default function Members({ ctx }) {
                 <div className="flex flex-wrap gap-2 text-sm">
                   <button className="btn-ghost" onClick={() => act(`/api/admin/members/${detail.member.id}/adjust-stamps`, { delta: 1 })}>+1 stamp</button>
                   <button className="btn-ghost" onClick={() => act(`/api/admin/members/${detail.member.id}/adjust-stamps`, { delta: -1 })}>−1 stamp</button>
-                  <button className="btn-ghost" onClick={() => act(`/api/admin/members/${detail.member.id}/voucher`, { title: 'Voucher permintaan maaf: Cimol Bojot kecil gratis', valueRp: 6000, minSpendRp: 0, validDays: 14 })}>Voucher manual</button>
+                  <button className="btn-ghost" onClick={() => setMv({ title: 'Voucher permintaan maaf: Cimol Bojot kecil gratis', valueRp: 6000, minSpendRp: 0, validDays: 14 })}>Voucher manual</button>
                   <button className="btn-ghost" onClick={() => act(`/api/admin/members/${detail.member.id}/block`, {})}>{detail.member.blocked ? 'Buka blokir' : 'Blokir'}</button>
                   <button className="btn-ghost text-brand" onClick={() => confirm('Hapus & anonimkan member ini?') && act(`/api/admin/members/${detail.member.id}?reason=${encodeURIComponent(reason)}`, null, 'DELETE')}>Hapus (anonimkan)</button>
                 </div>
               </div>
+            )}
+            {mv && (
+              <form className="card space-y-2" onSubmit={(e) => { e.preventDefault(); act(`/api/admin/members/${detail.member.id}/voucher`, { ...mv, valueRp: Number(mv.valueRp), minSpendRp: Number(mv.minSpendRp), validDays: Number(mv.validDays) }); setMv(null) }}>
+                <div className="font-bold text-sm">Voucher manual untuk {detail.member.name || detail.member.phone}</div>
+                <Field label="Judul (tampil ke member & crew)"><input className="input" required minLength={3} value={mv.title} onChange={(e) => setMv({ ...mv, title: e.target.value })} /></Field>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label="Nilai (Rp)"><input className="input" inputMode="numeric" value={mv.valueRp} onChange={(e) => setMv({ ...mv, valueRp: e.target.value })} /></Field>
+                  <Field label="Min. belanja (0 = gratis)"><input className="input" inputMode="numeric" value={mv.minSpendRp} onChange={(e) => setMv({ ...mv, minSpendRp: e.target.value })} /></Field>
+                  <Field label="Berlaku (hari)"><input className="input" inputMode="numeric" value={mv.validDays} onChange={(e) => setMv({ ...mv, validDays: e.target.value })} /></Field>
+                </div>
+                <div className="flex gap-2"><button type="button" className="btn-ghost" onClick={() => setMv(null)}>Batal</button><button className="btn-primary">Terbitkan</button></div>
+              </form>
             )}
             <div className="grid md:grid-cols-2 gap-3 text-sm">
               <div><div className="font-bold mb-1">Stamp</div>

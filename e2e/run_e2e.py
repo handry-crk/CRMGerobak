@@ -284,6 +284,8 @@ async def main(base: str, chrome: str, shots: str):
             await expect(ad.locator("text=Cimol Bojot kecil gratis").first).to_be_visible()
             await ad.fill('label:has-text("Alasan tindakan") input', "e2e kompensasi")
             await ad.click('button:has-text("Voucher manual")')
+            await ad.wait_for_selector("text=Voucher manual untuk")
+            await ad.click('button:text-is("Terbitkan")')
             await ad.wait_for_selector("text=Tersimpan")
             await ad.screenshot(path=f"{shots}/a04_member_detail.png", full_page=True)
             await ad.click('button:has-text("Tutup")')

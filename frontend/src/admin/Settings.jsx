@@ -33,7 +33,7 @@ export default function Settings({ ctx }) {
   async function saveUser(e) {
     e.preventDefault()
     try {
-      if (u.id) await adminApi(`/api/admin/users/${u.id}`, { method: 'PUT', body: u })
+      if (u.id) await adminApi(`/api/admin/users/${u.id}`, { method: 'PUT', body: { ...u, pin: undefined } })
       else await adminApi('/api/admin/users', { method: 'POST', body: u })
       ctx.notify('User tersimpan'); setU(null); load()
     } catch (e) { ctx.notify(e.message) }
@@ -144,7 +144,7 @@ export default function Settings({ ctx }) {
           <div className="font-extrabold">Job & data</div>
           <div className="flex flex-wrap gap-2">
             {['activate', 'expire', 'digest', 'weekly', 'backup'].map((j) => <button key={j} className="btn-ghost" onClick={() => runJob(j)}>Jalankan {j}</button>)}
-            <button className="btn-ghost" onClick={seed}>Isi outlet contoh</button>
+            <button className="btn-ghost" onClick={seed} title="Hanya bisa saat belum ada outlet sama sekali">Isi outlet contoh (DB kosong)</button>
           </div>
           {jobOut && <pre className="text-xs bg-tint/40 p-2 rounded-lg overflow-auto">{jobOut}</pre>}
           <div className="border-t border-line pt-3">
@@ -186,7 +186,8 @@ export default function Settings({ ctx }) {
             {u.role === 'Area' && u.areas.length === 0 && <div className="text-xs text-brand font-bold">Role Area wajib memilih minimal satu area.</div>}
             {u.role === 'Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{ctx.meta.areas.map((a) => <button type="button" key={a} className={`chip ${u.areas.includes(a) ? 'chip-on' : ''}`} onClick={() => setU({ ...u, areas: u.areas.includes(a) ? u.areas.filter((x) => x !== a) : [...u.areas, a] })}>{a}</button>)}</div></Field>}
             <Field label="Email (untuk digest)"><input className="input" value={u.email || ''} onChange={(e) => setU({ ...u, email: e.target.value })} /></Field>
-            <Field label={u.id ? 'PIN baru (kosongkan bila tidak diganti)' : 'PIN awal (4–6 angka)'}><input className="input" inputMode="numeric" maxLength={6} required={!u.id} value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value })} /></Field>
+            {!u.id && <Field label="PIN awal (4–6 angka)"><input className="input" inputMode="numeric" maxLength={6} required value={u.pin} onChange={(e) => setU({ ...u, pin: e.target.value })} /></Field>}
+            {u.id && <p className="text-xs text-charcoal/60">Ganti PIN lewat tombol <b>Reset PIN</b> di daftar admin.</p>}
             <div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost" onClick={() => setU(null)}>Batal</button><button className="btn-primary" disabled={u.role === 'Area' && u.areas.length === 0}>Simpan</button></div>
           </form>
         </div>
