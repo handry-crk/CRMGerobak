@@ -22,10 +22,11 @@ from ..services.voucher import create_campaign_vouchers, create_reward_voucher, 
 from ..utils import add_days, iso, mask_phone, new_id, new_qr_token, normalize_phone, now_utc, today_wib
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-PRIV = require_roles("Manager", "CRM Lead")          # lihat pengaturan, ekspor, campaign, stiker ZIP
-LEAD = require_roles("Manager", "CRM Lead")          # aksi operasional: pengaturan, member, nomor crew
+OPS_ROLES = ("Manager", "Marketing Team Leader", "CRM Lead")
+PRIV = require_roles(*OPS_ROLES)                     # lihat pengaturan, ekspor, campaign, stiker ZIP
+LEAD = require_roles(*OPS_ROLES)                     # aksi operasional: pengaturan, member, nomor crew
 MGR = require_roles("Manager")                       # kelola akun admin, job, data contoh
-WRITE = require_roles("Manager", "CRM Lead", "Area")
+WRITE = require_roles(*OPS_ROLES, "Area")
 
 
 async def audit(db, user: dict, action: str, target: str | None = None, detail: dict | None = None):

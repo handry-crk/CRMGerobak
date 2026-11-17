@@ -348,3 +348,12 @@ async def test_create_user_requires_pin(client, admin):
     assert r.status_code == 422 and r.json()["detail"]["code"] == "pin_required"
     r = await client.post("/api/admin/users", json={"name": "Area Kosong", "role": "Area", "pin": "1111"}, headers=admin)
     assert r.status_code == 422 and r.json()["detail"]["code"] == "area_required"
+
+
+async def test_marketing_team_leader_role(client, admin):
+    r = await client.post("/api/admin/users", json={"name": "Kintan Asokawati", "role": "Marketing Team Leader", "pin": "8888", "email": "kintan.asokawati@citarasakuliner.com"}, headers=admin)
+    assert r.status_code == 200
+    h = {"Authorization": f"Bearer {(await client.post('/api/admin/login', json={'name': 'Kintan Asokawati', 'pin': '8888'})).json()['token']}"}
+    assert (await client.get("/api/admin/settings", headers=h)).status_code == 200
+    assert (await client.get("/api/admin/export/members.csv", headers=h)).status_code == 200
+    assert (await client.post("/api/admin/users", json={"name": "X", "role": "Viewer", "pin": "1111"}, headers=h)).status_code == 403

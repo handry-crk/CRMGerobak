@@ -55,7 +55,7 @@ Dev terpisah: `uvicorn app.main:app --reload` (port 8000) + `cd frontend && npm 
 5. `/saya` — progres, voucher, riwayat, opt-out WA, pindah HP (ketik nomor; OTP = Iterasi 1).
 
 ## Admin (`/admin`, login nama + PIN; 5× salah → kunci 15 menit)
-Role **Manager** (akses penuh: termasuk kelola akun admin, job, data contoh), **CRM Lead** (operasional: pengaturan program, member, nomor crew, campaign, ekspor), **Area** (hanya area yang ditugaskan, nomor dimasker), **Viewer** (baca, nomor dimasker). Akun bawaan `Admin` = Manager.
+Role **Manager** (akses penuh: termasuk kelola akun admin, job, data contoh), **Marketing Team Leader** & **CRM Lead** (operasional: pengaturan program, member, nomor crew, campaign, ekspor), **Area** (hanya area yang ditugaskan, nomor dimasker), **Viewer** (baca, nomor dimasker). Akun bawaan `Admin` = Manager.
 Ringkasan (member baru, aktif 30D, stamp, scan rate, repeat 30D, redemption, Balik Lagi, rating, grafik per hari/jam/minggu, top/bottom outlet, perlu dicek, lonjakan) · Outlet & QR (CRUD, impor CSV, heatmap hari×jam, transaksi POS manual, stiker A6/tent card PDF, ZIP per area, **Ganti QR**) · Member (cari, detail, ±stamp, voucher manual, blokir, hapus/anonimkan — semua dengan alasan → audit log) · Voucher (statistik, campaign per segmen) · Rating · Pengaturan (program, anti-abuse, Balik Lagi, promo aktif, admin, job, audit).
 
 ## Anti-fraud crew (lapis 1 + 3)

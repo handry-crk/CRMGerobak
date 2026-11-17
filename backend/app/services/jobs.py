@@ -56,7 +56,7 @@ def _wrap(title: str, body: str) -> str:
 
 async def _recipients(db: AsyncIOMotorDatabase, settings: dict) -> list[str]:
     emails = {settings.get("adminEmail") or config.admin_email}
-    async for u in db.admin_users.find({"role": {"$in": ["CRM Lead", "Manager"]}, "active": True, "email": {"$exists": True}}):
+    async for u in db.admin_users.find({"role": {"$in": ["Manager", "Marketing Team Leader", "CRM Lead"]}, "active": True, "email": {"$exists": True}}):
         emails.add(u.get("email"))
     return [e for e in emails if e]
 

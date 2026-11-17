@@ -42,7 +42,7 @@ DEFAULT_SETTINGS: dict = {
     "flagDeviceThreshold": 3,
 }
 
-ADMIN_ROLES = ("Manager", "CRM Lead", "Area", "Viewer")  # Manager = akses penuh; CRM Lead = operasional
+ADMIN_ROLES = ("Manager", "Marketing Team Leader", "CRM Lead", "Area", "Viewer")  # Manager = akses penuh; Marketing Team Leader & CRM Lead = operasional
 AREAS = ("Jakarta", "Bandung", "Bekasi", "Depok", "Bogor", "Tangsel", "Tangerang")
 SOURCES = ("Lewat gerobak", "Instagram", "TikTok", "Teman", "GoFood/GrabFood", "Lainnya")
 # Skala kepuasan 1–5 dengan emoji & label; dikelompokkan: 1–2 Tidak puas, 3 Biasa, 4–5 Puas
