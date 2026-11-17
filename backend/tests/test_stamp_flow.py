@@ -405,4 +405,4 @@ async def test_campaign_revoke_delete_and_void(client, admin, outlets):
     vb = await db.vouchers.find_one({"type": "balik_lagi", "memberId": {"$ne": r1["member"]["id"]}})
     assert (await client.post(f"/api/admin/vouchers/{vb['_id']}/void", json={"reason": "salah terbit"}, headers=admin)).status_code == 200
     assert (await db.vouchers.find_one({"_id": vb["_id"]}))["status"] == "expired"
-    assert (await client.post(f"/api/admin/vouchers/{v['_id']}/void", json={"reason": "x"}, headers=admin)).status_code == 409
+    assert (await client.post(f"/api/admin/vouchers/{v['_id']}/void", json={"reason": "sudah dipakai"}, headers=admin)).status_code == 409

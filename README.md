@@ -76,7 +76,7 @@ Admin: `/api/admin/*` (Bearer token). Integrasi (header `X-Api-Key`): `GET /api/
 
 ## Tes
 ```bash
-cd backend && python -m pytest -q     # 28 skenario acceptance API (mongomock, tanpa server Mongo)
+cd backend && python -m pytest -q     # 29 skenario acceptance API (mongomock, tanpa server Mongo)
 ```
 End-to-end lewat browser sungguhan (25 skenario admin + customer, butuh Chrome & `pip install playwright`):
 ```bash
