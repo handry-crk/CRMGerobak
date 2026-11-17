@@ -445,9 +445,11 @@ class CampaignIn(BaseModel):
     minSpendRp: int = Field(ge=0, default=0)
     validFrom: str
     validTo: str
-    segment: str = "semua"  # semua | area | dorman30 | minVisits
+    segment: str = "semua"  # semua | area | dorman30 | minVisits | nomor
     area: str | None = None
     minVisits: int | None = None
+    maxIssue: int | None = Field(default=None, ge=1, le=100000)  # batas jumlah terbit (member terbaru kunjungannya didahulukan)
+    phones: str | None = Field(default=None, max_length=20000)   # segmen "nomor": daftar 08xxx dipisah baris/koma
 
 
 @router.get("/vouchers/stats")
@@ -473,6 +475,7 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: Asyn
     if await db.campaigns.find_one({"code": code}):
         raise HTTPException(409, {"code": "dup", "message": "Kode campaign sudah ada."})
     q: dict = {"blocked": {"$ne": True}, "optIn": True}
+    not_found: list[str] = []
     if body.segment == "area":
         ids = [o["_id"] async for o in db.outlets.find({"area": body.area}, {"_id": 1})]
         q["firstOutletId"] = {"$in": ids}
@@ -480,13 +483,48 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(PRIV), db: Asyn
         q["lastVisitAt"] = {"$lt": add_days(today_wib(), -30)}
     elif body.segment == "minVisits":
         q["visits"] = {"$gte": int(body.minVisits or 1)}
-    member_ids = [m["_id"] async for m in db.members.find(q, {"_id": 1})]
-    camp = {"_id": new_id("cmp"), **body.model_dump(), "code": code, "validFrom": vf, "validTo": vt, "issued": len(member_ids), "createdAt": iso(now_utc()), "createdBy": user["name"]}
+    elif body.segment == "nomor":
+        import re as _re
+        raw = [x for x in _re.split(r"[\s,;]+", body.phones or "") if x]
+        phones = []
+        for x in raw:
+            n = normalize_phone(x)
+            if n and n not in phones:
+                phones.append(n)
+        if not phones:
+            raise HTTPException(422, {"code": "no_phones", "message": "Isi minimal satu nomor 08xxxxxxxx."})
+        q = {"phone": {"$in": phones}}  # nomor tertentu: abaikan opt-in/blokir, ini kiriman langsung
+        found = {m["phone"] async for m in db.members.find(q, {"phone": 1})}
+        not_found = [p for p in phones if p not in found]
+    cur = db.members.find(q, {"_id": 1}).sort("lastVisitAt", -1)
+    if body.maxIssue:
+        cur = cur.limit(int(body.maxIssue))
+    member_ids = [m["_id"] async for m in cur]
+    camp = {"_id": new_id("cmp"), **body.model_dump(exclude={"phones"}), "code": code, "validFrom": vf, "validTo": vt,
+            "issued": len(member_ids), "notFound": not_found, "createdAt": iso(now_utc()), "createdBy": user["name"]}
     await db.campaigns.insert_one(camp)
     n = await create_campaign_vouchers(db, camp, member_ids)
-    await audit(db, user, "campaign.create", camp["_id"], {"code": code, "issued": n})
+    await audit(db, user, "campaign.create", camp["_id"], {"code": code, "issued": n, "segment": body.segment})
     camp["id"] = camp.pop("_id")
     return camp
+
+
+class WipeIn(BaseModel):
+    confirm: str
+
+
+@router.post("/wipe-test-data")
+async def wipe_test_data(body: WipeIn, user: dict = Depends(MGR), db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Hapus data uji sebelum pilot: member, stamp, voucher, feedback, campaign, alert, transaksi outlet, kunci.
+    Outlet, akun admin, nomor crew, dan pengaturan dipertahankan. Hanya Manager; konfirmasi ketik HAPUS."""
+    if body.confirm.strip().upper() != "HAPUS":
+        raise HTTPException(422, {"code": "confirm", "message": "Ketik HAPUS untuk konfirmasi."})
+    removed = {}
+    for coll in ["members", "stamps", "vouchers", "feedback", "campaigns", "alerts", "outlet_transactions", "stamp_locks", "job_log"]:
+        res = await db[coll].delete_many({})
+        removed[coll] = res.deleted_count
+    await audit(db, user, "data.wipe_test", None, removed)
+    return {"ok": True, "removed": removed}
 
 
 # ---------- Rating ----------

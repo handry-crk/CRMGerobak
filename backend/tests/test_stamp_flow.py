@@ -357,3 +357,22 @@ async def test_marketing_team_leader_role(client, admin):
     assert (await client.get("/api/admin/settings", headers=h)).status_code == 200
     assert (await client.get("/api/admin/export/members.csv", headers=h)).status_code == 200
     assert (await client.post("/api/admin/users", json={"name": "X", "role": "Viewer", "pin": "1111"}, headers=h)).status_code == 403
+
+
+async def test_campaign_max_issue_and_specific_numbers_and_wipe(client, admin, outlets):
+    for ph in ["081200000001", "081200000002", "081200000003"]:
+        await stamp(client, outlets[0]["qrToken"], phone=ph, name="T")
+    base = {"title": "Tes", "valueRp": 1000, "validFrom": today_wib(), "validTo": add_days(today_wib(), 7)}
+    r = await client.post("/api/admin/campaigns", json={**base, "code": "MAX2", "segment": "semua", "maxIssue": 2}, headers=admin)
+    assert r.status_code == 200 and r.json()["issued"] == 2
+    r = await client.post("/api/admin/campaigns", json={**base, "code": "NOMOR", "segment": "nomor", "phones": "0812-0000-0001, +6281200000003\n089999999999"}, headers=admin)
+    assert r.status_code == 200 and r.json()["issued"] == 2 and r.json()["notFound"] == ["089999999999"]
+    db = dbmod.get_db()
+    assert await db.vouchers.count_documents({"campaignCode": "NOMOR"}) == 2
+    # wipe
+    bad = await client.post("/api/admin/wipe-test-data", json={"confirm": "hapus semua"}, headers=admin)
+    assert bad.status_code == 422
+    ok = await client.post("/api/admin/wipe-test-data", json={"confirm": "HAPUS"}, headers=admin)
+    assert ok.status_code == 200 and ok.json()["removed"]["members"] == 3
+    assert await db.members.count_documents({}) == 0 and await db.vouchers.count_documents({}) == 0
+    assert await db.outlets.count_documents({}) == 5 and await db.admin_users.count_documents({}) >= 1

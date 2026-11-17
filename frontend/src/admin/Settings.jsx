@@ -11,6 +11,7 @@ export default function Settings({ ctx }) {
   const [audit, setAudit] = useState([])
   const [jobOut, setJobOut] = useState('')
   const [tempPin, setTempPin] = useState(null)
+  const [wipe, setWipe] = useState('')
   const [myPin, setMyPin] = useState({ oldPin: '', newPin: '' })
 
   const load = () => {
@@ -50,6 +51,10 @@ export default function Settings({ ctx }) {
 
   async function runJob(j) {
     try { const r = await adminApi(`/api/admin/jobs/${j}/run`, { method: 'POST' }); setJobOut(JSON.stringify(r)); ctx.notify(`Job ${j} dijalankan`) } catch (e) { ctx.notify(e.message) }
+  }
+
+  async function wipeTest() {
+    try { const r = await adminApi('/api/admin/wipe-test-data', { method: 'POST', body: { confirm: wipe } }); setWipe(''); ctx.notify(`Data uji dihapus: ${r.removed.members} member, ${r.removed.stamps} stamp, ${r.removed.vouchers} voucher`); load() } catch (e) { ctx.notify(e.message) }
   }
 
   async function seed() {
@@ -142,6 +147,14 @@ export default function Settings({ ctx }) {
             <button className="btn-ghost" onClick={seed}>Isi outlet contoh</button>
           </div>
           {jobOut && <pre className="text-xs bg-tint/40 p-2 rounded-lg overflow-auto">{jobOut}</pre>}
+          <div className="border-t border-line pt-3">
+            <div className="font-bold text-sm text-brand">Hapus data uji (sebelum pilot)</div>
+            <p className="text-xs text-charcoal/60 mt-1">Menghapus semua member, stamp, voucher, rating, campaign, alert, dan laporan transaksi. Outlet, akun admin, nomor crew, dan pengaturan tetap. Tidak bisa dibatalkan.</p>
+            <div className="mt-2 flex gap-2 items-end">
+              <Field label="Ketik HAPUS untuk konfirmasi"><input className="input" value={wipe} onChange={(e) => setWipe(e.target.value)} /></Field>
+              <button className="btn bg-brand text-white" disabled={wipe.trim().toUpperCase() !== 'HAPUS'} onClick={wipeTest}>Hapus data uji</button>
+            </div>
+          </div>
         </div>
       )}
 

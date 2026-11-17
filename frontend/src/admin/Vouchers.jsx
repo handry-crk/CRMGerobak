@@ -4,7 +4,7 @@ import { adminApi, daysAgo, downloadWithAuth, today } from './adminApi.js'
 import { Field, Table, Tile } from './ui.jsx'
 
 const TYPE_LABEL = { balik_lagi: 'Balik Lagi (welcome)', stamp_reward: 'Reward 5 stamp', campaign: 'Campaign / manual', welcome: 'Welcome' }
-const EMPTY = { code: '', title: '', valueRp: 3000, minSpendRp: 15000, validFrom: today(), validTo: daysAgo(-14), segment: 'semua', area: '', minVisits: 3 }
+const EMPTY = { code: '', title: '', valueRp: 3000, minSpendRp: 15000, validFrom: today(), validTo: daysAgo(-14), segment: 'semua', area: '', minVisits: 3, maxIssue: '', phones: '' }
 
 export default function Vouchers({ ctx }) {
   const [stats, setStats] = useState(null)
@@ -16,8 +16,8 @@ export default function Vouchers({ ctx }) {
   async function submit(e) {
     e.preventDefault()
     try {
-      const c = await adminApi('/api/admin/campaigns', { method: 'POST', body: { ...form, valueRp: Number(form.valueRp), minSpendRp: Number(form.minSpendRp), minVisits: Number(form.minVisits) } })
-      ctx.notify(`Campaign ${c.code}: ${c.issued} voucher diterbitkan`); setForm(null); load()
+      const c = await adminApi('/api/admin/campaigns', { method: 'POST', body: { ...form, valueRp: Number(form.valueRp), minSpendRp: Number(form.minSpendRp), minVisits: Number(form.minVisits), maxIssue: form.maxIssue ? Number(form.maxIssue) : null } })
+      ctx.notify(`Campaign ${c.code}: ${c.issued} voucher diterbitkan${c.notFound?.length ? ` · ${c.notFound.length} nomor belum jadi member` : ''}`); setForm(null); load()
     } catch (e) { ctx.notify(e.message) }
   }
 
@@ -28,7 +28,19 @@ export default function Vouchers({ ctx }) {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {types.map(([t, s]) => {
           const issued = Object.values(s).reduce((a, b) => a + b, 0)
-          return <Tile key={t} label={TYPE_LABEL[t] || t} value={s.used || 0} sub={`ditukar dari ${issued} · aktif ${s.active || 0} · hangus ${s.expired || 0}${s.scheduled ? ` · terjadwal ${s.scheduled}` : ''}`} />
+          const pct = issued ? Math.round(((s.used || 0) / issued) * 100) : 0
+          return (
+            <div key={t} className="card">
+              <div className="text-xs text-charcoal/60 font-bold">{TYPE_LABEL[t] || t}</div>
+              <div className="mt-1 flex items-baseline gap-2"><span className="text-2xl font-extrabold text-brand">{s.used || 0}</span><span className="text-sm font-bold">ditukar</span><span className="text-xs text-charcoal/60">({pct}%)</span></div>
+              <div className="mt-2 grid grid-cols-4 gap-1 text-center text-xs">
+                <div><div className="font-extrabold">{issued}</div><div className="text-charcoal/60">terbit</div></div>
+                <div><div className="font-extrabold text-okgreen">{s.active || 0}</div><div className="text-charcoal/60">aktif</div></div>
+                <div><div className="font-extrabold">{s.scheduled || 0}</div><div className="text-charcoal/60">terjadwal</div></div>
+                <div><div className="font-extrabold text-charcoal/50">{s.expired || 0}</div><div className="text-charcoal/60">hangus</div></div>
+              </div>
+            </div>
+          )
         })}
         {types.length === 0 && <div className="card text-sm text-charcoal/60 col-span-full">Belum ada voucher.</div>}
       </div>
@@ -42,7 +54,7 @@ export default function Vouchers({ ctx }) {
       <Table
         cols={[
           { key: 'code', label: 'Kode' }, { key: 'title', label: 'Judul' }, { key: 'valueRp', label: 'Nilai', render: (c) => `Rp${fmtRp(c.valueRp)}`, align: 'right' },
-          { key: 'segment', label: 'Segmen', render: (c) => c.segment + (c.area ? ` (${c.area})` : '') + (c.segment === 'minVisits' ? ` (≥${c.minVisits})` : '') },
+          { key: 'segment', label: 'Segmen', render: (c) => c.segment + (c.area ? ` (${c.area})` : '') + (c.segment === 'minVisits' ? ` (≥${c.minVisits})` : '') + (c.maxIssue ? ` · maks ${c.maxIssue}` : '') },
           { key: 'validFrom', label: 'Berlaku', render: (c) => `${c.validFrom} – ${c.validTo}` },
           { key: 'issued', label: 'Terbit', align: 'right' }, { key: 'used', label: 'Ditukar', align: 'right' },
         ]}
@@ -70,8 +82,11 @@ export default function Vouchers({ ctx }) {
                 <option value="area">Per area</option>
                 <option value="dorman30">Member dorman ≥ 30 hari</option>
                 <option value="minVisits">Member dengan ≥ N kunjungan</option>
+                <option value="nomor">Nomor tertentu (internal / tes)</option>
               </select>
             </Field>
+            {form.segment !== 'nomor' && <Field label="Batas jumlah terbit (kosong = semua yang cocok; member terakhir berkunjung didahulukan)"><input className="input" inputMode="numeric" value={form.maxIssue} onChange={(e) => setForm({ ...form, maxIssue: e.target.value })} placeholder="mis. 50" /></Field>}
+            {form.segment === 'nomor' && <Field label="Daftar nomor WA (pisahkan baris/koma; harus sudah jadi member)"><textarea className="input min-h-[96px] py-2" value={form.phones} onChange={(e) => setForm({ ...form, phones: e.target.value })} placeholder={'081234567890\n081298765432'} /></Field>}
             {form.segment === 'area' && <Field label="Area"><select className="input" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })}><option value="">Pilih…</option>{ctx.meta.areas.map((a) => <option key={a}>{a}</option>)}</select></Field>}
             {form.segment === 'minVisits' && <Field label="N kunjungan"><input className="input" inputMode="numeric" value={form.minVisits} onChange={(e) => setForm({ ...form, minVisits: e.target.value })} /></Field>}
             <div className="grid grid-cols-2 gap-2"><button type="button" className="btn-ghost" onClick={() => setForm(null)}>Batal</button><button className="btn-primary">Terbitkan</button></div>
